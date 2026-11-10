@@ -1,4 +1,4 @@
-# Connector Hub
+# 连接器（Connector）
 
 > DeepSeek Harness 的 MCP 连接控制台。基于 `dsh-mcp-connector` v0.2.97 完整 fork 而来，**独立包名、独立路由、独立存储域**，可与原插件同时安装运行。
 
@@ -10,7 +10,7 @@
 面板显示「已连接 / ok」 → 用户点生成视频 → 报错 → 回头查状态还是 ok
 ```
 
-Connector Hub 的核心优化就是把这两个状态分开。
+连接器的核心优化就是把这两个状态分开。
 
 ## 相对原版的改动
 
@@ -81,7 +81,7 @@ bash install.sh
 ```
 
 安装后**重启 `dsh web`** 才会加载新插件。之后：
-- 侧边栏出现「Connector Hub」入口；
+- 侧边栏出现「连接器」入口；
 - 面板地址 `http://127.0.0.1:3080/connector-hub/ui/`；
 - 对话中可用 `connector_hub_health_check`、`connector_hub_repair_credentials` 等工具。
 

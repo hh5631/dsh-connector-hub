@@ -225,7 +225,7 @@ function displayValue(value) {
 export function renderSharingExperiencePreview(input) {
   const draft = createSharingExperience(input);
   const lines = [
-    t("# MCP连接器使用体验（草稿）"),
+    t("# 连接器使用体验（草稿）"),
     '',
     t("> 本草稿只包含用户主动填写的任务、版本、步骤状态与限制；复制草稿不代表连接或业务调用成功。"),
     '',

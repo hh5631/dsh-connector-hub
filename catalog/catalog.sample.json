@@ -1,5 +1,5 @@
 {
-  "$comment": "MCP连接器内置目录示例。published=true 才出现在用户货架；registry 中禁止携带任何密钥（加载时校验剥离）。",
+  "$comment": "连接器内置目录示例。published=true 才出现在用户货架；registry 中禁止携带任何密钥（加载时校验剥离）。",
   "meta": {
     "schemaVersion": 1,
     "categories": ["企业数据", "办公协作", "地图出行", "金融行情", "开发工具", "数据库", "AI 模型", "其他"]
@@ -21,7 +21,7 @@
         "mode": "oauth2-pkce",
         "issuer": "https://agent.qcc.com",
         "scope": "mcp:tools",
-        "clientName": "DeepSeek Harness - MCP 连接器",
+        "clientName": "DeepSeek Harness - 连接器",
         "tokenEndpointAuthMethod": "none",
         "grantSharing": "issuer"
       },
@@ -65,7 +65,7 @@
         "mode": "oauth2-pkce",
         "issuer": "https://agent.qcc.com",
         "scope": "mcp:tools",
-        "clientName": "DeepSeek Harness - MCP 连接器",
+        "clientName": "DeepSeek Harness - 连接器",
         "tokenEndpointAuthMethod": "none",
         "grantSharing": "issuer"
       },
@@ -101,7 +101,7 @@
       "auth": {
         "mode": "api-key",
         "apiKeyHeader": "X-Api-Key",
-        "clientName": "DeepSeek Harness - MCP 连接器"
+        "clientName": "DeepSeek Harness - 连接器"
       },
       "servers": [
         {
@@ -127,7 +127,7 @@
       "homepage": "https://example.com/mcp",
       "auth": {
         "mode": "bearer",
-        "clientName": "DeepSeek Harness - MCP 连接器"
+        "clientName": "DeepSeek Harness - 连接器"
       },
       "servers": [
         {

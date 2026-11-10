@@ -1,6 +1,6 @@
 # MCP 连接的 project/global 作用域
 
-本说明定义 MCP连接器的 Workspace 项目范围、profile 全局范围、Host 强制执行边界，以及复制、移动和回滚的安全语义。
+本说明定义 连接器的 Workspace 项目范围、profile 全局范围、Host 强制执行边界，以及复制、移动和回滚的安全语义。
 
 ## 1. 两级范围与继承
 

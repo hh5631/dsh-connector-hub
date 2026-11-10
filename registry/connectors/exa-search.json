@@ -16,7 +16,7 @@
     "mode": "oauth2-pkce",
     "issuer": "https://auth.exa.ai",
     "scope": "mcp:tools",
-    "clientName": "DeepSeek Harness - MCP 连接器",
+    "clientName": "DeepSeek Harness - 连接器",
     "tokenEndpointAuthMethod": "none",
     "grantSharing": "connector"
   },

@@ -1,5 +1,14 @@
 # Changelog
 
+## 未发布
+
+- 界面改名为「连接器」：侧边栏入口、面板标题、设置卡片、工具描述与文档统一使用「连接器 / Connector」，不再出现「MCP连接器」。底层仍是 MCP 连接管理，只改称呼。
+- 控制台视觉重做（v4「端口面板」）：每条连接左侧一道 3px 状态竖脊作为端口指示灯，绿/琥珀/红/空心 对应 已验证/待确认/失效/未启用；健康总览改为分段量表 + 语义色药丸，去掉装饰性色块。
+- 元信息区修复：去掉与前缀 gap 叠成重影的伪元素竖线；传输方式为空时不再渲染空字段。
+- 已验证的连接不再重复渲染「业务通道已验证」备注，状态药丸已表达同一信息。
+- 品牌记号换成 3×3 端口阵列（左上角一间点亮），同步更新侧边栏入口图标与原生侧边栏图标。
+- 品牌名与统计标签接入 i18n，英文界面不再残留中文。
+
 ## 0.2.97
 
 - Bind remote catalog caches and ETags to catalogUrl. Changing the source fetches the new catalog immediately, including while the old cache TTL is fresh; failed requests do not expose entries from another source (#219).
@@ -15,7 +24,7 @@
 
 ## 0.2.95
 
-- Add a standalone Settings → MCP Connector page with the existing sidebar visibility switch and open-panel action, including hosts without a Plugins settings page (#216).
+- Add a standalone Settings → Connector page with the existing sidebar visibility switch and open-panel action, including hosts without a Plugins settings page (#216).
 - Retain the legacy plugin settings card and shared profile preference; hiding the shortcut does not disable connections or tools.
 - Cover delayed settings slots, removal/remount and opening with the sidebar hidden. Windows Desktop and the original reporter environment still require acceptance; this does not close #166 or #216.
 
@@ -333,7 +342,7 @@
 
 - DSH `>=0.2.0-rc.2` 的左侧入口改用官方 `sidebar.panellist` 与 keyed `main` 席位，由宿主统一渲染行高、折叠提示、选中态和无障碍名称；市场主体与设置页快捷弹框共用（#129）。
 - DSH `0.1.x` 仅在原生席位不可用时按需启用 footer/Portal 兼容适配器；席位延迟到达时会原子替换，不会同时显示两个入口。
-- 关闭“在侧边栏显示 MCP连接器”会真正注销原生行；如果当前正在连接器面板，先安全返回会话界面。
+- 关闭“在侧边栏显示 连接器”会真正注销原生行；如果当前正在连接器面板，先安全返回会话界面。
 
 ### Verification
 
@@ -343,7 +352,7 @@
 
 ### Fixed
 
-- 不再用全局 CSS 改写宿主 `sidebar.footer.action` 的 `display: contents` 槽位，仅对 MCP 连接器自己的 footer 降级入口设置布局，避免与同槽位第三方插件组合时把相邻条目折入不可见的第二列（#124、#127）。
+- 不再用全局 CSS 改写宿主 `sidebar.footer.action` 的 `display: contents` 槽位，仅对 连接器自己的 footer 降级入口设置布局，避免与同槽位第三方插件组合时把相邻条目折入不可见的第二列（#124、#127）。
 - 为顶部 Portal 与 footer 降级入口增加明确的 placement 标记，并保护窄侧栏折叠按钮不被 flex 拉伸。
 
 ### Verification
@@ -365,8 +374,8 @@
 
 ### Changed
 
-- 侧栏“MCP连接器”入口由平台相关的彩色 emoji 改为继承 `currentColor` 的单色线性 SVG，与 DSH 宿主导航的尺寸、线性风格和深浅主题保持一致（#117）。
-- 同步无凭据 UI harness 和入口文档，图标保持 `aria-hidden`，不改变“MCP连接器”的无障碍名称。
+- 侧栏“连接器”入口由平台相关的彩色 emoji 改为继承 `currentColor` 的单色线性 SVG，与 DSH 宿主导航的尺寸、线性风格和深浅主题保持一致（#117）。
+- 同步无凭据 UI harness 和入口文档，图标保持 `aria-hidden`，不改变“连接器”的无障碍名称。
 
 ### Verification
 
@@ -495,7 +504,7 @@
 
 ### Fixed
 
-- 修复侧边栏 MCP 连接器入口鼠标悬停时出现额外粗边框的问题；统一入口留白与图标/文字间距，保留键盘焦点提示和折叠侧栏入口（#86）。
+- 修复侧边栏 连接器入口鼠标悬停时出现额外粗边框的问题；统一入口留白与图标/文字间距，保留键盘焦点提示和折叠侧栏入口（#86）。
 
 ## [0.2.51] - 2026-09-16
 
@@ -654,8 +663,8 @@
 
 ### Fixed
 
-- 从“设置 → 插件 → 插件配置”快捷打开 MCP连接器时，将连接器弹框 Portal 到页面根层并显示在设置弹框之上；关闭后仍返回原设置位置。
-- MCP连接器位于设置弹框上方时会优先处理 Escape，只关闭最上层连接器弹框，不连带关闭底层设置弹框。
+- 从“设置 → 插件 → 插件配置”快捷打开 连接器时，将连接器弹框 Portal 到页面根层并显示在设置弹框之上；关闭后仍返回原设置位置。
+- 连接器位于设置弹框上方时会优先处理 Escape，只关闭最上层连接器弹框，不连带关闭底层设置弹框。
 
 ### Verification
 
@@ -665,8 +674,8 @@
 
 ### Added
 
-- 在 `设置 → 插件 → 插件配置` 新增“MCP连接器”卡片，可按当前 DSH profile 显示或隐藏侧边栏入口。
-- 设置卡片新增“打开 MCP连接器”快捷动作；入口隐藏后仍可随时打开、连接和管理 MCP Server，关闭弹框后返回原操作位置。
+- 在 `设置 → 插件 → 插件配置` 新增“连接器”卡片，可按当前 DSH profile 显示或隐藏侧边栏入口。
+- 设置卡片新增“打开 连接器”快捷动作；入口隐藏后仍可随时打开、连接和管理 MCP Server，关闭弹框后返回原操作位置。
 
 ### Changed
 
@@ -862,7 +871,7 @@
 
 ### Added
 
-- MCP连接器标题显示当前插件版本，并由服务端缓存检查 npm `latest` 与 GitHub Release；发现新版本时引导用户前往 DSH 插件市场安全更新。
+- 连接器标题显示当前插件版本，并由服务端缓存检查 npm `latest` 与 GitHub Release；发现新版本时引导用户前往 DSH 插件市场安全更新。
 
 ### Changed
 
@@ -1115,7 +1124,7 @@
 ### Documentation
 
 - 记录 `0.2.5` GitHub/npm 发布、DSH Desktop 精确版本安装、孤立 grant 自动清理与 19/19 Server 健康回归结果。
-- 扩充 GitHub Topic、仓库简介、README 和 npm 关键词，覆盖 MCP连接器、连接管理、插件/扩展、集成、Qichacha/QCC 和企查查等真实检索入口。
+- 扩充 GitHub Topic、仓库简介、README 和 npm 关键词，覆盖 连接器、连接管理、插件/扩展、集成、Qichacha/QCC 和企查查等真实检索入口。
 - 明确“技能扩展”指 MCP 工具与 Prompt 对智能体能力的扩展，不将本包标记为独立 DSH Skill。
 
 ## [0.2.5] - 2026-08-21
@@ -1163,7 +1172,7 @@
 
 ### Changed
 
-- 面向中国市场将 MCP 连接器运行界面固定为中文，移除顶部 `EN` 按钮、英文 UI 字典、语言偏好持久化和切换事件；英文 README 继续作为项目文档保留。
+- 面向中国市场将 连接器运行界面固定为中文，移除顶部 `EN` 按钮、英文 UI 字典、语言偏好持久化和切换事件；英文 README 继续作为项目文档保留。
 
 ## [0.2.2] - 2026-08-21
 
@@ -1173,7 +1182,7 @@
 
 ### Changed
 
-- 产品名称和介绍统一为通用 MCP Connector Marketplace；企查查作为项目发起方、维护方和首批连接器提供方，不限定可接入厂商。
+- 产品名称和介绍统一为通用 Connector Marketplace；企查查作为项目发起方、维护方和首批连接器提供方，不限定可接入厂商。
 - 重构 npm 关键词，保留 DSH、Cordis、MCP、OAuth/PKCE 和企查查检索入口，并补充 `dsh-plugin`、`mcp-client`、`oauth2`、`enterprise-data`。
 - 更新市场注册移交文档、测试数量和 awesome-dsh-plugin 注册描述，移除易过期的工具与 Prompt 数量。
 
@@ -1237,7 +1246,7 @@
 
 ### Added
 
-- DeepSeek Harness Desktop 左侧“MCP连接器”入口，位于“新会话”下、“工作区/会话列表”上，并提供 footer 自动降级。
+- DeepSeek Harness Desktop 左侧“连接器”入口，位于“新会话”下、“工作区/会话列表”上，并提供 footer 自动降级。
 - 图形化连接器市场与已安装列表，内置 4 个企查查连接器和本地 QCC Logo。
 - OAuth 2.0 PKCE、自定义 MCP 配置、`mcpServers` JSON 导入和描述 URL 安装四条接入路径。
 - 连接持久化、重启恢复、启停、断开、OAuth Token 刷新与撤销。

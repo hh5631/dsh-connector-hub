@@ -1,6 +1,6 @@
 # 受控 CLI Provider
 
-MCP 连接器原生支持 Streamable HTTP 和 stdio MCP。对于钉钉 `dws` 这类面向人类与 Agent、但本身不是 MCP Server 的官方 CLI，插件通过独立的 CLI→MCP 桥接进程暴露经过审核的结构化工具。
+连接器原生支持 Streamable HTTP 和 stdio MCP。对于钉钉 `dws` 这类面向人类与 Agent、但本身不是 MCP Server 的官方 CLI，插件通过独立的 CLI→MCP 桥接进程暴露经过审核的结构化工具。
 
 ## 安全边界
 

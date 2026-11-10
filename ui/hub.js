@@ -1,4 +1,4 @@
-/* Connector Hub 控制台 — 面板逻辑 v3
+/* 连接器控制台 — 面板逻辑 v4
  * 契约：POST /connector-hub/api  {method, params}；GET /connector-hub/events（SSE invalidation）。
  * 业务失败 = HTTP 200 + {ok:false, message}。所有状态枚举按值判断，文案只展示不解析。
  * 本文件不读取、不回显任何凭据；修复凭据时只把用户新输入的值发给 repairCredentials。
@@ -88,7 +88,7 @@ const LOCALE = (() => {
 })();
 const I18N = {
   'zh-CN': {
-    connections: '连接', catalog: '目录', tools: '工具', subtitle: 'MCP 连接控制台', workspace: '工作台',
+    brand: '连接器', connections: '连接', catalog: '目录', tools: '工具', subtitle: '外部服务接入控制台', workspace: '工作台',
     search: '搜索连接、服务或工具…', toolSearch: '搜索工具名或描述…', refresh: '刷新', check: '深度检查', add: '添加连接',
     overview: '业务健康总览', overviewSub: '颜色表示业务通道的真实状态，握手成功不代表凭据有效',
     verified: '业务已验证', unknown: '待确认', invalid: '凭据失效', idle: '未启用',
@@ -121,7 +121,7 @@ const I18N = {
     oauthFlow: '授权方式', flowAuto: '自动', flowCode: '浏览器授权码', flowDevice: '设备码（输入短码）',
   },
   en: {
-    connections: 'Connections', catalog: 'Catalog', tools: 'Tools', subtitle: 'MCP connection console', workspace: 'Workspace',
+    brand: 'Connector', connections: 'Connections', catalog: 'Catalog', tools: 'Tools', subtitle: 'External service access', workspace: 'Workspace',
     search: 'Search connections, servers or tools…', toolSearch: 'Search tool names or descriptions…', refresh: 'Refresh', check: 'Deep check', add: 'Add connection',
     overview: 'Business health', overviewSub: 'Colors show the real state of the business channel; a successful handshake does not prove valid credentials',
     verified: 'Verified', unknown: 'Unconfirmed', invalid: 'Invalid credential', idle: 'Disabled',
@@ -363,7 +363,7 @@ function rowHtml(item) {
   if (r === 'credential-invalid') { note = `${t('businessInvalid')} — ${t('hintReauth')}`; noteClass = 'bad'; }
   else if (expired) { note = t('credentialExpired'); noteClass = 'bad'; }
   else if (expiring) { note = t('credentialExpiring'); noteClass = 'warn'; }
-  else if (r === 'verified') { note = t('businessVerified'); }
+  /* 已验证是默认状态：状态药丸已经说了，不再重复一行备注。 */
   else if (r === 'unknown') { note = diag?.message ? esc(diag.message) : t('businessUnknown'); noteClass = 'warn'; }
   else if (diag?.message) { note = esc(diag.message); }
 
@@ -385,7 +385,7 @@ function rowHtml(item) {
       </div>
       <div class="row-meta">
         <span>${esc(authLabel(item))}</span>
-        <span>${esc(item.transport)}</span>
+        ${item.transport ? `<span>${esc(item.transport)}</span>` : ''}
         <span>${scopeLabel(item)}</span>
         <span class="endpoint" title="${esc(item.endpoint)}">${esc(item.endpoint)}</span>
       </div>
@@ -818,7 +818,8 @@ function bind() {
 }
 
 function applyStaticText() {
-  document.title = `Connector Hub · ${t('subtitle')}`;
+  document.title = `${t('brand')} · ${t('subtitle')}`;
+  el('brand-name').textContent = t('brand');
   el('brand-sub').textContent = t('subtitle');
   el('nav-connections-label').textContent = t('connections');
   el('nav-catalog-label').textContent = t('catalog');
@@ -834,6 +835,9 @@ function applyStaticText() {
   el('legend-warn').textContent = t('unknown');
   el('legend-bad').textContent = t('invalid');
   el('legend-idle').textContent = t('idle');
+  el('stat-ok-label').textContent = t('verified');
+  el('stat-warn-label').textContent = t('unknown');
+  el('stat-bad-label').textContent = t('invalid');
   el('probe-label').textContent = t('deepProbe');
   el('probe-note').textContent = t('deepProbeNote');
   el('tool-search').placeholder = t('toolSearch');

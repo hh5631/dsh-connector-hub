@@ -4,15 +4,20 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="color-scheme" content="light dark" />
-<title>Connector Hub</title>
+<title>连接器</title>
 <link rel="stylesheet" href="hub.css" />
 </head>
 <body>
 <div class="shell">
   <aside class="rail">
     <div class="brand">
-      <div class="brand-name">Connector Hub</div>
-      <div class="brand-sub" id="brand-sub">MCP 连接控制台</div>
+      <span class="brand-mark" aria-hidden="true">
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      </span>
+      <span class="brand-text">
+        <span class="brand-name" id="brand-name">连接器</span>
+        <span class="brand-sub" id="brand-sub">外部服务接入控制台</span>
+      </span>
     </div>
 
     <div class="rail-section" id="nav-label">工作台</div>
@@ -62,9 +67,9 @@
           <h2 id="overview-title">业务健康总览</h2>
           <span class="sub" id="overview-sub">颜色表示业务通道的真实状态，握手成功不代表凭据有效</span>
           <div class="stats">
-            <span class="stat ok"><b id="stat-ok">0</b>已验证</span>
-            <span class="stat warn"><b id="stat-warn">0</b>待确认</span>
-            <span class="stat bad"><b id="stat-bad">0</b>失效</span>
+            <span class="stat ok"><b id="stat-ok">0</b><span id="stat-ok-label">已验证</span></span>
+            <span class="stat warn"><b id="stat-warn">0</b><span id="stat-warn-label">待确认</span></span>
+            <span class="stat bad"><b id="stat-bad">0</b><span id="stat-bad-label">失效</span></span>
           </div>
         </div>
         <div class="bar" id="signalbar"><i class="s-idle" style="width:100%"></i></div>

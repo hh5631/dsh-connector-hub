@@ -1,4 +1,4 @@
-# MCP 连接器市场注册指南
+# 连接器市场注册指南
 
 ## 1. 先区分两种 JSON
 
@@ -100,7 +100,7 @@ MCP URL 需要携带查询参数（`?tools=`、`?tenant=` 等）时，OAuth 的 
     "mode": "oauth2-pkce",
     "issuer": "https://auth.vendor.example",
     "scope": "mcp:tools",
-    "clientName": "DeepSeek Harness - MCP 连接器",
+    "clientName": "DeepSeek Harness - 连接器",
     "tokenEndpointAuthMethod": "none"
   },
   "servers": [

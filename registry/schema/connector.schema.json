@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/duhu2000/dsh-connector-hub/registry/schema/connector.schema.json",
-  "title": "DSH MCP Connector Descriptor",
+  "title": "DSH Connector Descriptor",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "name", "servers"],

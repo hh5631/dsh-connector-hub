@@ -23,7 +23,7 @@ export const EN = Object.freeze({
   "不支持的体验草稿版本": "Unsupported experience draft version",
   "未知体验模板：{templateId}": "Unknown experience template: {templateId}",
   "未填写": "Not provided",
-  "# MCP连接器使用体验（草稿）": "# MCP Connector experience (draft)",
+  "# 连接器使用体验（草稿）": "# Connector experience (draft)",
   "> 本草稿只包含用户主动填写的任务、版本、步骤状态与限制；复制草稿不代表连接或业务调用成功。": "> This draft contains only user-entered tasks, versions, step statuses, and limitations. Copying it does not confirm a successful connection or business call.",
   "- 任务：{p0}": "- Task: {p0}",
   "- DSH 版本：{p0}": "- DSH version: {p0}",

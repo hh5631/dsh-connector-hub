@@ -154,7 +154,7 @@ function captureShell() {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>MCP连接器 · 无凭据验收环境</title>
+<title>连接器 · 无凭据验收环境</title>
 <style>
   * { box-sizing: border-box; }
   html, body { width: 100%; height: 100%; margin: 0; }
@@ -168,9 +168,9 @@ function captureShell() {
 </style>
 </head>
 <body style="--dsw-font-family: KaiTi, STKaiti, serif; --dsh-font-family-code: 'JetBrains Mono', 'SF Mono', monospace; --dsh-content-font-size: 17px; --dsh-code-font-size: 12px;">
-  <section class="capture-panel" aria-label="MCP连接器产品面板">
-    <header class="capture-header"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M6 2V4.5" stroke="currentColor" stroke-linecap="round"/><path d="M10 2V4.5" stroke="currentColor" stroke-linecap="round"/><path d="M3.5 4.5H12.5V8.25C12.5 10.7353 10.4853 12.75 8 12.75C5.51472 12.75 3.5 10.7353 3.5 8.25V4.5Z" stroke="currentColor" stroke-linejoin="round"/><path d="M8 12.75V14.5" stroke="currentColor" stroke-linecap="round"/></svg><span class="capture-title">MCP连接器</span><span class="capture-version">v${packageJson.version}</span><span class="capture-state">无凭据 Mock</span></header>
-    <iframe src="/connector-hub/ui/" title="MCP连接器"></iframe>
+  <section class="capture-panel" aria-label="连接器产品面板">
+    <header class="capture-header"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M6 2V4.5" stroke="currentColor" stroke-linecap="round"/><path d="M10 2V4.5" stroke="currentColor" stroke-linecap="round"/><path d="M3.5 4.5H12.5V8.25C12.5 10.7353 10.4853 12.75 8 12.75C5.51472 12.75 3.5 10.7353 3.5 8.25V4.5Z" stroke="currentColor" stroke-linejoin="round"/><path d="M8 12.75V14.5" stroke="currentColor" stroke-linecap="round"/></svg><span class="capture-title">连接器</span><span class="capture-version">v${packageJson.version}</span><span class="capture-state">无凭据 Mock</span></header>
+    <iframe src="/connector-hub/ui/" title="连接器"></iframe>
   </section>
   <script>
     window.addEventListener('message', (event) => {
@@ -199,7 +199,7 @@ function captureShell() {
   </script>
 </body>
 </html>`;
-  return english ? shell.replaceAll('MCP连接器', 'MCP Connector').replaceAll('无凭据验收环境', 'Credential-free test harness').replaceAll('无凭据 Mock', 'Credential-free Mock').replace('lang="zh-CN"', 'lang="en"').replace('src="/connector-hub/ui/"', 'src="/connector-hub/ui/?uiLocale=en"') : shell;
+  return english ? shell.replaceAll('连接器', 'Connector').replaceAll('无凭据验收环境', 'Credential-free test harness').replaceAll('无凭据 Mock', 'Credential-free Mock').replace('lang="zh-CN"', 'lang="en"').replace('src="/connector-hub/ui/"', 'src="/connector-hub/ui/?uiLocale=en"') : shell;
 }
 
 const server = createServer(async (req, res) => {
@@ -579,5 +579,5 @@ const server = createServer(async (req, res) => {
 
 server.listen(Number(process.env.CONNECTOR_HUB_UI_PORT ?? 4173), '127.0.0.1', () => {
   const address = server.address();
-  console.log(`MCP connector UI harness: http://127.0.0.1:${address.port}/connector-hub/ui/`);
+  console.log(`connector UI harness: http://127.0.0.1:${address.port}/connector-hub/ui/`);
 });
