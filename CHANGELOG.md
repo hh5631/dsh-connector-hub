@@ -1,0 +1,1308 @@
+# Changelog
+
+## 0.2.97
+
+- Bind remote catalog caches and ETags to catalogUrl. Changing the source fetches the new catalog immediately, including while the old cache TTL is fresh; failed requests do not expose entries from another source (#219).
+- Refresh legacy caches without a source URL once before reuse. Preserve same-source TTL hits, background refresh, HTTP 304 revalidation, and manual refresh behavior.
+- Add 13 regression cases covering source changes, failure isolation, storage validation, restart reuse, and manual refresh. Real Windows Desktop verification for #218 and #219 remains pending.
+
+## 0.2.96
+
+- Honor catalog TTL on startup; use audited stale cache immediately and refresh in the background, renew freshness on HTTP 304, and cancel superseded/disposed refreshes (#219). First installation without a valid cache still uses the existing foreground fetch path.
+- Expose exact connection keys and Workspace scope to the health-check tool; reject mismatched identifiers and prevent scoped checks from overwriting connector-wide health (#218).
+- Finish initialize validation when the matching SSE response arrives instead of waiting for a persistent stream to close. Handle fragmented/multiline events, ignore unrelated responses, and preserve authentication failures (#218).
+- Local synthetic regression reproduces the persistent-SSE timeout and verifies the fix. This does not establish the original reporter's root cause or replace Windows Desktop / business-call acceptance; #218 and #219 remain open pending review and reporter verification.
+
+## 0.2.95
+
+- Add a standalone Settings → MCP Connector page with the existing sidebar visibility switch and open-panel action, including hosts without a Plugins settings page (#216).
+- Retain the legacy plugin settings card and shared profile preference; hiding the shortcut does not disable connections or tools.
+- Cover delayed settings slots, removal/remount and opening with the sidebar hidden. Windows Desktop and the original reporter environment still require acceptance; this does not close #166 or #216.
+
+## 0.2.94
+
+- Clarify session activation steps and expose exact preview revision and activation arguments in model-visible text, without inventing user consent (#212).
+- Observe pending stdio Host registration with bounded startup retries and automatic tool discovery refresh (#210).
+- Support optional HTTPS credential-help links with a backward-compatible homepage fallback and bilingual labels (#209).
+- Automated and credential-free UI checks do not replace real TuShare or Windows Desktop acceptance. The provider Content-Type issue #208 remains unresolved.
+
+## 0.2.93
+
+- Reposition homepage recommendations around ten specialist data sources, preserving card sizes, category previews and fixed ordering.
+- Update bilingual product metadata, README and credential-free media for the data marketplace positioning.
+- Recommendation placement does not certify live provider authorization or business calls; provider acceptance remains required.
+
+本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)；首个公开版本从 `0.1.0` 开始。
+
+## [0.2.92] - 2026-11-01
+
+### Fixed
+
+- 修复英文分类标签撑宽整个页面的问题，分类导航限制在独立单行区域，搜索栏和卡片不再随分类横移。
+- 分类宽度不足时显示左右箭头，点击翻看后续分类；两端按钮自动禁用，全部放得下时隐藏箭头。
+- 保留选中分类、焦点与导航位置，支持窗口尺寸变化、中英文提示及减少动态效果偏好。
+
+### Verification
+
+- 隔离 Chrome Mock 验证箭头到达两端、选择分类、返回开头、语言切换和窄屏无整页横向溢出；不代表 Windows Desktop 实机验收。
+- 同步重采中英文截图及 GIF，不读取用户 profile、不调用服务商、不重启 DSH。
+
+## [0.2.91] - 2026-11-01
+
+### Changed
+
+- npm 使用的根 README 补充英文简介、安装指引、英文界面截图与完整英文文档入口，保留中文说明。
+- 英文 README 全部 8 张截图和演示 GIF 改为英文 UI 实际渲染素材，厂商原文保留，明确标注无凭据 Mock。
+- 中英文素材同步采集并分别记录版本、日期、源码指纹和哈希；校验覆盖两套素材，避免英文文档沿用旧中文图。
+
+### Verification
+
+- 素材使用隔离浏览器与 Mock API，不读取用户配置、不连接服务商、不重启 DSH；不代表 Windows Desktop 实机验收。
+
+## [0.2.90] - 2026-11-01
+
+### Changed
+
+- 语言入口缩为「中文 / EN」并入工具栏，不再独占一行；完整语言名称保留在提示与读屏标签中。
+- 刷新目录与首次使用改为带完整提示的紧凑图标按钮，桌面操作区共用一行，窄窗口自适应两行，为卡片留出更多空间。
+- 保留语言记忆与未保存编辑确认，编辑弹窗正常遮挡背景工具栏。
+
+### Verification
+
+- 完整回归及隔离 Chrome Mock 验证中英文切换、紧凑布局、窄屏与防御性确认；不代表 Windows Desktop 实机验收。
+
+## [0.2.89] - 2026-11-01
+
+### Changed
+
+- 语言下拉改为面板顶部右侧始终可见的「简体中文 / English」按钮，当前语言高亮，支持键盘和读屏。
+- 记住当前浏览器同源下的主动语言选择；存储不可用时仍可通过页面参数切换，未选择时继续跟随 Host 并回退中文。
+- 编辑时切换语言仍需确认放弃未保存内容；只重载面板，不重启 DSH 或修改 Host 配置。
+
+### Verification
+
+- 完整回归及隔离 Chrome Mock 验证覆盖切换、重开记忆、取消确认、窄屏与存储降级，不代表 Windows Desktop 实机验收。
+
+## [0.2.88] - 2026-10-31
+
+### Added
+
+- 整合 #167 / #174 的中英文 UI、诊断和管理工具翻译，并保留至 0.2.87 的运行时、安全、多工作区和分享功能。感谢 Marek Vrbka 的国际化贡献。
+- 面板新增简体中文 / English 切换；切换时若有未保存编辑需先确认。Host `locale: auto` 跟随 DSH 显式偏好，缺失时回退中文，不再根据英文 shell 环境自动切换。显式 `zh-CN` / `en` 控制 Host 文案。
+- 补译近期新增的首次使用、范围管理、统计与分享编辑器提示，修复 Windows 翻译完整性检查的文件路径处理。
+- 连接器品牌和描述、用户输入、工具 ID、URL、错误码及分享模板 v1 固定安全标记不翻译；不改变凭据、权限或数据格式。
+
+### Verification scope
+
+- 本地完整检查及隔离真实 Chromium 中英 UI 检查分别执行；后者只使用 Mock API，不是业务调用或 Windows Desktop 实机验收。Windows Desktop 反馈继续在 #167 跟踪。
+
+## [0.2.87] - 2026-10-31
+
+### Added
+
+- #199：已安装连接的范围管理支持一次选择多个工作区；替换指定范围时取消原有全局可见，首次连接保留单选入口。
+- 作用域 API 支持 targetWorkspaceIds，保留旧单目标 copy/move 兼容；批量校验、预览版本检查、持久化和历史回滚复用现有 projects 列表，不复制凭据或连接。
+
+### Fixed
+
+- 保存作用域时拒绝重叠写入，避免并发修改覆盖；保存失败不更新内存范围。
+
+### Verification
+
+- 完整检查 518 通过、8 条件跳过、0 失败；隔离真实浏览器验证空选拒绝、多选应用与回显。
+- Web/Host 测试及无凭据 Mock 浏览器验收不等于 Windows Desktop 实机验收；#199 保留开放。
+
+## [0.2.86] - 2026-10-31
+
+### Changed
+
+- 首页推荐追加高德地图、Context7，分别位于第 9、10 位；前八项顺序、默认展开及分类预览保持不变。
+- 同步当前版本文档与无凭据 Mock 发布素材；卡片推荐不表示真实账号授权或业务调用验收通过。
+
+## [0.2.85] - 2026-10-30
+
+### Changed
+
+- 首页推荐按固定顺序展示企查查·企业工商、腾讯文档、飞书开放平台、Notion、GitHub、Playwright、Wind·股票数据、企查查·法律数据。
+- 推荐区默认展开全部可用推荐卡片，不再限制为四张；已连接状态不改变推荐顺序。
+- 保留现有卡片大小、分类预览、标题、边框及接入条件提示。
+- 同步版本文档及无凭据 Mock 产品截图；素材不代表真实授权或业务调用验收。
+
+## [0.2.84] - 2026-10-29
+
+### Added
+
+- PR #195：已安装页增加本机连接统计，以当前 profile 成功连接过的目录卡片为单位，明确区分历史基线与近 30 天首次连接的新卡片。
+- 统计不包含社区总量、独立用户数或业务调用成功数，不上传数据。
+
+### Fixed
+
+- 统计写入改为后台串行队列，增加超时、队列上限和释放保护；存储异常不阻塞连接返回或启动基线初始化。
+- 撤回社区上报、汇总、参与开关与热门排序实验；本版本不部署统计后端。
+
+### Verification
+
+- 自动化覆盖去重、持久化恢复、基线、统计失败/挂起/晚到、队列上限、API 范围与 UI 文案。
+- 发行素材使用无凭据 Mock 重新采集；CI、Mock 与 macOS 测试不代替 Windows Desktop 实机验收。
+
+## [0.2.83] - 2026-10-26
+
+### Fixed
+
+- #190 / PR #191：连接范围变更和回退的确认框限制最大高度，正文独立滚动，标题与确认、取消按钮保持可见；工具列表只展示前 12 项并注明总数。
+- 不修改连接范围应用、回退、乐观锁或凭据处理语义。
+
+### Documentation and verification
+
+- 同步当前版本文档，并重新采集本版本无凭据 Mock 截图及 GIF；素材不代表真实授权或业务调用成功。
+- macOS 浏览器组件验收覆盖 360×400、640×300、1000×720 视口、8 个 Server 各 125 个长工具名、正文滚动、键盘确认/取消及焦点恢复；不等同于 Windows Desktop 实机验收。
+- #178、#181 保持开放，继续等待原报告者 Windows 复测。
+
+## [0.2.82] - 2026-10-26
+
+### Added
+
+- 新增首次使用只读引导，将安装、授权、工具发现/缓存和真实业务调用拆成独立阶段；只读取当前作用域内的状态和缓存，不把“已安装”“有缓存”或“已复制草稿”误判为业务成功。
+- 新增“分享使用体验”草稿编辑器。用户选择公开教程模板、按实际情况填写版本与步骤状态后，只有明确点击才会把脱敏文本带入会话草稿；Host 返回成功前不宣称已带入，失败时保留预览供修正重试。
+- 新增确定性安全连接模板分享。输出只包含白名单允许的固定结构和审核过的公开目录引用；自定义 URL、连接名称、凭据、Header、OAuth Grant、stdio 命令与环境变量不会进入分享结果。
+
+### Changed
+
+- 增强外部分发源审计：以 npm `latest` 为规范版本，严格检查 awesome-dsh-plugin/DSH Market、dshopen 及受监控目录的版本与 npm 安装元数据；`stale`、`invalid`、`missing`、`unavailable` 均不能通过同步门禁。
+- 分发漂移继续由单一自动跟踪项维护；已有目录等待同步或元数据修正时，不重复提交外部上架 PR/Issue。
+
+### Security and privacy
+
+- 所有分享行为均需用户明确操作；插件不会自动发送消息、调用业务工具、公开发帖或上传业务数据。本版本不新增遥测，也不读取完整对话、真实工具返回、账号、凭据或现有连接配置来推断分享状态。
+- 非法版本或模板输入失败时保持选择器、内容和预览一致，并给出可纠正提示，不以半更新界面继续生成草稿。
+
+### Verification scope and known limitations
+
+- 完整 `npm run check`：502 项测试，494 通过、8 项按环境条件跳过、0 失败；99 个发布文件通过白名单以及凭据/本机路径扫描。跳过项不计作通过。
+- 自动化、无凭据 UI harness 与缓存/localhost 合成测试只证明代码路径和安全边界，不替代真实 DSH Host、真实 OAuth、真实连接、付费业务调用或搜索排名验收。
+- 2026-10-16 的企业简介证据只证明当时已有连接完成过一次获准的真实只读调用，不能外推为 v0.2.82 首次安装、首次授权、JSON 迁移、连接恢复或所有业务工具成功。
+- 仓库截图和 GIF 是标注版本的无凭据 Mock 素材；分发版本/安装元数据同步也不等于搜索排名、曝光、安装转化或业务成功。
+
+## [0.2.81] - 2026-10-25
+
+### Documentation
+
+- 明确默认 Desktop/Web 安装 profile 与各自重启方式，移除未经验证的“30 秒”安装承诺。
+- 修正中英文 README 的截图版本说明，区分历史 Mock 演示与真实业务验收。
+- 新增企业简介首次只读调用教程和社区分享素材包，提供复现步骤、文章提纲、素材来源及脱敏反馈模板。
+- 新增教程随 npm 包分发，并纳入首次使用文档、打包白名单和本地链接校验。本版本不修改运行时功能，不新增遥测或真实业务调用。
+
+## [0.2.80] - 2026-10-25
+
+### Fixed
+
+- #181：将 Zod 从宿主 peer 改为插件直接依赖（^4.1.8），全新 generation 安装无需借用宿主 asar 或手工创建共享 profiles/node_modules。保留 React 和 @deepseek-ai/* 宿主 peer，不放宽宿主隔离校验。
+- 增加 Windows/Linux 全新打包安装门禁：禁用 peer 自动安装，无共享依赖目录，对照 0.2.79 缺失依赖并验证新包提升到 live 后 Zod 的真实路径与实际消费者导入。
+- 该门禁是隔离安装测试，不等于 Windows Desktop 插件管理器 UI 实机验收；#178 仍待原报告者 Windows 性能复测。
+
+## [0.2.79] - 2026-10-24
+
+### Fixed
+
+- #178：治理、项目作用域和会话注入刷新改为轻量名称读取，不再调用 tools.schemas() 深克隆参数，切断 schema 读取副作用引起的延迟事件回路。
+- 默认全局/always 且无 deny 或停用连接时跳过清单读取；项目隔离每轮只读取一次，不按 Agent 数重复。
+- 保留执行 guard、工具增删感知和权限交集；名称读取失败时保留已有限制，不把错误当空清单，也不回退 schema 扫描。
+
+### Compatibility and verification
+
+- 优先使用上游公开 definitions()；已发布旧 Host 通过集中、只读、形状校验的内部 view() 兼容层读取名称。内部接口属于兼容风险，增加 Windows/Linux × Host 0.2.1-rc.2/rc.3 契约门禁；不修改宿主安装。
+- 增加同步、微任务、下一轮事件交付及残余 schema 反馈回路回归。详见 docs/ACCEPTANCE-178-20261024.md。
+- 本次是工具运行时机制修复；报告者 Windows Desktop UI 的原始卡顿与 1.29 亿次调用对照仍需复测，#178 保留跟踪。不包含延期的国际化或其他草案功能。
+
+## [0.2.78] - 2026-10-22
+
+### Fixed
+
+- 将版本检查 API 的 401、403、404、5xx 和异常 JSON 响应区分为可操作的提示，避免把所有失败笼统显示为插件 API 不可用；不向界面回显代理正文或敏感响应信息。
+- 补充 NAS / 反向代理诊断指引和回归测试，保留 Host/Origin 安全边界。
+
+### Scope
+
+- 本版本改进 #172 的诊断，不宣称已修复或实机验证飞牛 NAS 的部署路由问题；该 Issue 保持开放。
+- 不包含暂缓的国际化 PR #174 或待验收的启动加固 PR #168。
+
+## [0.2.77] - 2026-10-22
+
+### Security
+
+- 从 PR #174 独立提取内联事件参数转义修复：先编码 JavaScript 字符串，再编码 HTML 属性，防止目录/连接标识中的特殊字符形成脚本注入。感谢 Marek Vrbka 的报告与修复。
+- 回归测试直接读取生产 UI 的转义函数；隔离真实浏览器通过 28 个事件/载荷组合，并复现旧转义方式的对照问题。验证不访问真实 DSH API、凭据或用户连接。
+- 本次不包含 #174 的国际化改造；既有 Windows Desktop 等验收待办保持开放。
+
+## [0.2.76] - 2026-10-20
+
+### Added / Fixed
+
+- 无凭据市场 stdio 连接可在首次安装及已安装界面设置本地 argsAppend/env/cwd；保留目录来源和连接身份，支持脱敏编辑、快照恢复、失败重试及停用保持。
+- 串行处理首次安装、编辑、停用和断开，防止迟到启动恢复过期状态；持久化与回滚双重失败保留恢复快照并返回安全提示。
+- 修正已安装工具详情将 stdio 错标为远程服务的问题。
+- 不开放 OAuth、凭据绑定、CLI 桥接或完整参数替换。
+
+### Verification and known limitations
+
+- 完整 check（含隔离真实 MCP bridge）：427 passed / 4 skipped / 0 failed；89 个发布文件检查通过。
+- macOS 隔离真实 UI 验证安装、编辑、停用/启用、工具发现、失败重试、快照恢复、脱敏导出及断开。
+- 按维护者明确要求发布。Windows Desktop 实机、完整宿主重启持久化与生产 ToolRuntime UI 调用尚未验收；CI 不等于 Desktop 验收，#146 保持开放。详见 docs/ACCEPTANCE-146-20261020.md。
+
+## [0.2.75] - 2026-10-17
+
+### Added
+
+- 可选 `compactManagementTools` 精简管理工具模式（#161）：开启后将 25 个管理工具收敛为只读发现与原有会话管理两个入口；图形界面功能不变。默认关闭以兼容旧工具名，修改后需重载插件。
+- 统一发现入口仅允许目录、状态、缓存搜索与详情四种操作，保留工作区参数与原有渲染，不提供通用工具调用、凭据变更或授权代理。业务工具可见性、会话确认和 Host 审批沿用原机制。
+- 教程相对 inline Markdown 链接与图片检查（#159 / #156），覆盖 Windows 路径、代码片段排除、标题与括号文件名、越界及不存在的目标；纳入 `npm run check`。不宣称覆盖引用式链接、HTML 或完整 CommonMark。
+
+### Verification scope
+
+- 本地完整 `npm run check`：408 项通过、4 项条件跳过、0 失败；88 个发布文件通过白名单与凭据/本机路径扫描。跳过项不计作通过。
+- 新增工具数量、schema 大小、严格分派、结果渲染、参数拒绝、会话上下文、卸载清理和图形 API 集成回归。#163 与 #159 已通过 Node 20/22/24、Windows 和 Zod 4.1.8 CI。真实 DSH Web/Desktop 开关重载及模型调用验收仍需单独完成；#161 保留打开，精简模式默认关闭。
+- #146 本地参数覆盖、#105 Schema 变化提醒、#83 钉钉授权等开发草案不包含在本次发布中；旧企查查凭据不做自动迁移。
+
+## [0.2.74] - 2026-10-16
+
+### Added
+
+- 加强 JSON 迁移、OAuth 首次成功和工具恢复教程：补充授权/费用/数据去向边界、三层成功判据、发布准备包与等长窗口复盘方法，并建立无需凭据的当前新手任务 #156。
+- 增加当前发现缓存生命周期集成证据，覆盖同名工具 Schema 增删改、失败保留最后成功记录、恢复后重新发现及敏感默认值清理；该证据不宣称实现 #105 变更提醒，也不替代真实 Host UI 验收。
+
+### Changed
+
+- 从 0.2.73 隔离无凭据 harness 重采市场、OAuth 详情、JSON 导入和连接诊断素材，逐项登记版本、Mock 来源、尺寸与哈希；历史截图和 GIF 继续保留明确版本标识。
+- 收窄 P3 数据源复核口径：协议初始化、工具枚举或元数据工具成功不再表述为业务数据验收；未验证结果字段、来源、时间范围、单位或缺失值的候选统一保持 `DEFERRED`，且本版本不新增 Registry 卡片。
+
+### Verification
+
+- 发布候选需通过 Node 20/22/24、Windows、Zod 4.1.8、PR 安装包、完整 `npm run check` 和发布文件白名单检查后，才允许创建 `v0.2.74` 标签。
+
+## [0.2.73] - 2026-10-15
+
+### Fixed
+
+- 兼容 DSH 0.2.1-alpha.1 起的 webStartup 服务，同时保留旧宿主 webRuntime 支持，修复面板正文及 API 路由未挂载导致的空白（#151）。两种服务并存时优先使用 webStartup 的可信主机配置，服务卸载时清理路由。
+- 将插件 API 请求失败与 npm 版本查询失败区分提示，不再把路由不可用统一报告为 npm 网络错误。
+
+## [0.2.72] - 2026-10-14
+
+### Fixed
+
+- 宿主切换面板销毁 iframe 后，按工作区恢复页签、搜索、市场分类、展开章节、工具筛选/分页及列表滚动。状态仅保留在同源宿主当前页面内存，最多 32 个工作区，不保存凭据表单、API 返回或授权弹框；刷新宿主页面即清除。
+- 市场与已安装列表加入请求序列和工作区检查，防止较早响应覆盖新页签/工作区；加载中的滚动归零不覆盖恢复位置。
+- 本次为浏览状态恢复而非 iframe 保活：仍重新拉取数据、重建 SSE，详情和未完成表单不恢复。
+
+## [0.2.71] - 2026-10-14
+
+### Added
+
+- 目录新增 HTTP Server 的 `servers[].oauthResource`：MCP URL 需要携带查询参数（如 `?tools=`）时，OAuth 的 `resource` 授权参数、`grant.authorizedResources` 与刷新参数改用规范资源标识，实际请求仍使用带查询参数的 `url`，避免刷新被授权服务器按 `invalid_target` 拒绝。仅 `oauth2-pkce` 卡片可声明，且必须与 `url` 同源。
+- Registry 种子新增“Exa·网络搜索”第三方卡片（`registry/connectors/exa-search.json`）：OAuth 一键授权接入 Exa 官方远程 MCP，覆盖语义搜索、全文抓取、高级检索与多步研究 Agent。
+
+### Fixed
+
+- 修复 Windows 钉钉 CLI 包 bin 字段带 ./ 前缀时无法发现原生程序；精确匹配的旧受管桥接命令在运行时更新到 0.2.71，不覆盖自定义参数。
+- 原生确认框改为页面内对话框，取消默认聚焦且 Enter 尊重焦点，避免误确认和桌面失焦。
+- 已安装列表状态刷新保留滚动位置，回归测试抽取失败时显式报错。
+- 远程目录请求支持 HTTP_PROXY / HTTPS_PROXY / NO_PROXY，不修改宿主全局代理。
+- 桌面嵌入 CSP 允许显式配置可信祖先源，默认仍为 self。
+- 重连与同一连接的停用、删除、修改串行执行；多 Server 注册等待并行，失败明确区分保留配置与 Host 状态。
+
+- `normalizeConnectorDescriptor` 不再静默丢弃 HTTP Server 上的 `oauthResource` / `oauthTokenEnv`：前者现在生效，后者由目录审计显式拒绝，描述文件作者不会在无任何报错的情况下被忽略。
+- 「已安装」页为未处于“已连接”的连接提供「重新连接」：重建 Host 侧条目并在有界时间内等待 stdio 工具重新注册，不修改配置、凭据、范围或注入模式；对话工具同步新增 `connector_hub_reconnect`。
+
+### Changed
+
+- 「检测旧插件」改名为「检测企查查旧授权」，并说明扫描范围与“不会删除旧插件或原凭据”。
+
+- 桌面宿主（Electron 内嵌 DSH）下启动 stdio 连接不再必然失败：以 `process.execPath` 启动守卫时注入 `ELECTRON_RUN_AS_NODE`，守卫再把该变量从真实 server 的子进程环境中移除（0.2.70 的 #130 只覆盖了 CLI 宿主）。
+
+## [0.2.70] - 2026-10-08
+
+### Fixed
+
+- Windows 启动恢复保护采用 cross-spawn 解析 PATH/PATHEXT 与 npm .cmd shim，修复 npx 连接手动成功但重启失败的问题（#130）。
+- 命令缺失时返回不含命令、参数或凭据的 ENOENT 与 PATH 检查提示。
+- 新增 Windows 真实 .cmd 子进程回归，覆盖带空格路径与特殊字符参数。
+
+## [0.2.69] - 2026-10-08
+
+### Changed
+
+- DSH `>=0.2.0-rc.2` 的左侧入口改用官方 `sidebar.panellist` 与 keyed `main` 席位，由宿主统一渲染行高、折叠提示、选中态和无障碍名称；市场主体与设置页快捷弹框共用（#129）。
+- DSH `0.1.x` 仅在原生席位不可用时按需启用 footer/Portal 兼容适配器；席位延迟到达时会原子替换，不会同时显示两个入口。
+- 关闭“在侧边栏显示 MCP连接器”会真正注销原生行；如果当前正在连接器面板，先安全返回会话界面。
+
+### Verification
+
+- 新增 DSH 0.2 原生席位、0.1.x 兼容回退、延迟席位替换和动态隐藏/恢复回归测试。
+
+## [0.2.68] - 2026-10-06
+
+### Fixed
+
+- 不再用全局 CSS 改写宿主 `sidebar.footer.action` 的 `display: contents` 槽位，仅对 MCP 连接器自己的 footer 降级入口设置布局，避免与同槽位第三方插件组合时把相邻条目折入不可见的第二列（#124、#127）。
+- 为顶部 Portal 与 footer 降级入口增加明确的 placement 标记，并保护窄侧栏折叠按钮不被 flex 拉伸。
+
+### Verification
+
+- 在最新 `main` 合并态通过 327 项测试（324 通过、3 项环境性跳过、0 失败）、Node 20/22/24、Windows、Zod 4.1.8、PR 安装包与发布文件白名单校验。
+
+## [0.2.67] - 2026-10-06
+
+### Fixed
+
+- 面板标题图标与侧栏入口统一为继承 `currentColor` 的单色 SVG，并补充对字面 emoji、Unicode 转义和直接码点的回归检查，修复 #118 后遗漏的面板标题彩色图标（#122、#123）。
+- 为重启恢复的 stdio MCP 连接增加有界的 `server/discover`、`initialize` 与首次 `tools/list` 分页请求；超时后关闭自有 transport 并回收进程树，避免单个异常 Server 阻塞 DSH Host，同时不禁用已保存连接，也不改变用户主动连接或 HTTP 连接流程（#125）。
+
+### Verification
+
+- 在最新 `main` 合并态通过 326 项测试（323 通过、3 项环境性跳过、0 失败）、Node 20/22/24、Windows、Zod 4.1.8、PR 安装包与发布文件白名单校验。
+
+## [0.2.66] - 2026-10-03
+
+### Changed
+
+- 侧栏“MCP连接器”入口由平台相关的彩色 emoji 改为继承 `currentColor` 的单色线性 SVG，与 DSH 宿主导航的尺寸、线性风格和深浅主题保持一致（#117）。
+- 同步无凭据 UI harness 和入口文档，图标保持 `aria-hidden`，不改变“MCP连接器”的无障碍名称。
+
+### Verification
+
+- 新增侧栏图标回归测试；在当前 `main` 合并态通过 309 项测试、Node 20/22/24、Windows、Zod 4.1.8 与 PR 安装包校验。
+
+## [0.2.65] - 2026-10-03
+
+### Added
+
+- 已安装连接新增“始终注入”与“按会话启用（实验）”模式；旧连接默认保持原行为，模式可随脱敏配置备份携带。
+- 新增 `connector_hub_session_tools` 元工具，支持会话状态、缓存搜索、精确激活预览、revision 提交与停用；激活从下一次模型推理边界生效，TTL 最长 30 分钟。
+- 会话可见性由 DSH Host 每 Agent `tools.restrict()` 与最终 `tools.guard()` 双重强制；状态仅在内存中按 Agent 隔离，不保存消息、触发词、工具参数或凭据（#111）。
+
+### Security
+
+- 会话激活只接受 Host 已观察的精确 public tool name，不能覆盖 Workspace 作用域、治理 `deny`、连接停用或 Host 审批；本版不实现关键词自动路由。
+
+### Verification
+
+- 新增双 Agent 隔离、TTL、revision 冲突、Workspace/治理拒绝、工具漂移、Agent 销毁和多 restriction 交集语义的 Host 契约回归。
+
+## [0.2.64] - 2026-10-02
+
+### Fixed
+
+- 将连接器描述和本机连接记录中的 `env`、`headers`、`credentialBindings` 改为 Zod 显式键/值 record，修复 Host 解析到 Zod 4.1.x 时非空对象触发 `_zod` TypeError、阻断 storage domain 和 DSH 启动的问题（#112）。
+- Zod peer 下限与已验证兼容版本对齐到 `4.1.8`，并增加固定旧版依赖的完整测试门禁，避免常规 CI 只安装最新版而掩盖兼容回归。
+
+### Verification
+
+- 新增非空 `env`、`headers`、`credentialBindings` 解析回归；CI 在 Zod 4.1.8 下执行完整测试套件。
+
+## [0.2.63] - 2026-09-30
+
+### Fixed
+
+- 检查可选 Settings 服务的实际 API 能力，避免宿主缺少 `register()` 时阻断启动；客户端遇到缺失或不完整的 settings scope 时保留连接器入口并跳过设置卡片。不吞掉已提供 API 的内部异常，也不宣称降级宿主支持设置持久化。
+
+## [0.2.62] - 2026-09-29
+
+### Documentation
+
+- 新增可信状态文案规范，严格区分授权、发现缓存、Host 注册和真实调用证据；Draft PR #105 的 Schema 变化提示明确保持为未发布候选能力。
+- 新增企业信息、本地智能文档解析、授权办公文档/日程三个只读首次成功场景包，并附权限、费用、数据去向、失败恢复和待验收边界。
+- 增加未发布的场景推广草稿与固定 7/14 天复盘日期；未指定平台、账号和审批人前不得公开投放。
+- 刷新带日期的 `0.2.59` 外部分发审计快照，不用后续版本改写历史观测。
+
+### Fixed
+
+- 外部目录页面缺少规范 npm 包链接时，分发检查现在返回可操作的诊断说明，而不是笼统标记为未发布。
+
+### Verification
+
+- 首次使用、README、营销元数据、发布包白名单、Node.js 20/22/24 和 Windows CI 全部通过。
+
+## [0.2.61] - 2026-09-29
+
+### Fixed
+
+- 健康探针展开 Node.js `fetch` 的嵌套错误原因，将 DNS、TLS、超时、连接重置和拒绝连接输出为稳定且不回显端点参数或凭据的诊断，避免报告只显示无法操作的 `fetch failed`。
+
+## [0.2.60] - 2026-09-29
+
+### Fixed
+
+- 放宽 `@deepseek-ai/dsh-mcp-client` peer 范围以支持 DSH `0.2.x`，避免插件在组合阶段被整体跳过、全部 MCP Server 消失（#101）。
+- 忽略工具 Schema 读取或 restriction 更新期间同步触发的嵌套 `tools/change`，阻断与工具重注册插件组合时的永久重扫和 100% CPU 死循环（#99）。
+- 连接范围选择器列出全部可用 Workspace；没有当前会话时仍可显式选择目标项目，不再只能保存为 profile 全局（#100）。
+
+### Verification
+
+- 新增治理与作用域控制器的同步重入回归、无当前会话的 Workspace 列表回归，以及 DSH `0.2.x` peer 范围门禁。
+
+## [0.2.59] - 2026-09-25
+
+### Fixed
+
+- 恢复市场中文描述中的连续“连接管理”短语，并增加核心检索文案门禁，修复真实 Market 查询无法命中该短语的回归。
+
+### Documentation
+
+- 新增统一首次成功路径，串联安装、连接、工具发现和 Host 审批下的首次只读调用。
+- 明确 DSH Desktop 与 `dsh web` 默认均使用本机 `web` profile；仅重启当前使用的 Host，避免安装位置与重启对象产生歧义。
+- 补充安全 Prompt 模板、权限/费用/副作用边界，以及 7/14 天无遥测复盘口径；没有证据时保持“无数据”，不从下载量推算转化率。
+
+## [0.2.58] - 2026-09-22
+
+### Documentation
+
+- 优化中英文首屏及外部目录介绍，明确 MCP 管理面板、授权配置和服务商权限边界。
+- 新增 JSON 迁移、OAuth 诊断和工具搜索恢复三篇任务教程，并验证教程随 npm 包发布。
+- 更新外部市场分发核验记录，区分上架、元数据同步、安装和真实调用验收。
+
+## [0.2.57] - 2026-09-22
+
+### Fixed
+
+- 打开插件及手动检查更新时刷新版本检测，新增常驻检查入口、检查时间和 npm 检测失败提示；更新服务已发现新版时不再被旧版本缓存隐藏按钮。
+
+## [0.2.56] - 2026-09-22
+
+### Documentation
+
+- 补充 macOS/Linux 与 Windows PowerShell 的 stdio 启动排查示例，说明 PATH、command/args、cwd、退出码及无 shell 启动的安全边界（#29）。
+
+## [0.2.55] - 2026-09-22
+
+### Fixed
+
+- Windows 钉钉 CLI 桥接解析官方 npm 包内原生 `dws.exe`，覆盖全局与 npx 布局，不执行 cmd shim，保持 shell:false；允许带空格的显式绝对路径并提供安装/原生文件缺失诊断（#91）。
+- 精确迁移标准受管钉钉 0.2.48/0.2.49 桥接到 0.2.55，保留自定义命令、参数、环境和授权配置。
+
+## [0.2.54] - 2026-09-21
+
+### Fixed
+
+- 修复本机安装的未发布同 ID 草案遮蔽公共 Registry 正式卡片的问题。正式卡片及示例 Prompt 在市场可见，显式本机上下架覆盖仍有效；已有连接和授权记录不变（#90）。
+
+## [0.2.53] - 2026-09-20
+
+### Fixed
+
+- 移除 `connector_hub_configure` 入参顶层 `anyOf`，避免拒绝该 Schema 的 Claude/Anthropic 兼容接口整轮请求失败；三种配置模式由工具描述提示并继续在执行时校验，新增全工具 Schema 与无效配置无副作用回归测试（#89）。此修复不转换外部 MCP Server 的工具 Schema。
+
+## [0.2.52] - 2026-09-20
+
+### Fixed
+
+- 修复侧边栏 MCP 连接器入口鼠标悬停时出现额外粗边框的问题；统一入口留白与图标/文字间距，保留键盘焦点提示和折叠侧栏入口（#86）。
+
+## [0.2.51] - 2026-09-16
+
+### Fixed
+
+- 恢复市场卡片的紧凑信息量：名称、两行简介与操作按钮；提供方、授权和权限长说明保留在详情与连接确认框，仅为 CLI/本地服务显示短标签。
+
+## [0.2.50] - 2026-09-16
+
+### Fixed
+
+- 修复 #79：含路径的 OAuth issuer 按 RFC 8414 在主机与路径之间插入发现地址；标准地址返回 404/405 时兼容旧后缀地址，无路径行为不变。
+- OIDC 补充发现兼容插入式和历史后缀式地址；仅合并 issuer 精确一致的元数据，拒绝缺失/不匹配的 OAuth issuer 及带 query/fragment 的 issuer，不因 403/429/5xx 或网络故障转试旧地址。
+- 区分 CLI 未授权与状态响应异常，保留可识别的诊断标记；Host 未保留具体原因时明确标记原因未知，不猜测管理员限制。
+- 不再因错误包含“连接”二字自动追加 MCP URL 建议；CLI/OAuth 错误保留原有指引。
+
+### Verification
+
+- 新增 14 项 OAuth 发现回归；完整 279 项测试通过，7 张商店截图和 78 个发布文件检查通过。
+- 修复后只读发现 Espressif docs 的公开 OAuth 元数据成功；未创建客户端、未进行用户授权或调用工具。本版不包含仍在独立 PR 中的钉钉浏览器授权新流程。
+
+## [0.2.49] - 2026-09-15
+
+### Fixed
+
+- 修复钉钉 CLI 状态查询返回 `success: true, authenticated: false` 时误显示已连接：枚举工具前严格检查授权布尔值，异常响应安全拒绝，并提示官方 OAuth 登录命令。
+- 重建运行配置时精确升级旧市场钉钉桥接版本，保留用户自定义命令与凭据。
+
+### Changed
+
+- 卡片、详情和连接入口显示提供方、授权方式、运行位置和权限提示；连接失败在弹窗内保留原因。
+- 增加 0.2.50 授权设计及 WPS / 腾讯会议接入验证清单，尚不代表完成真实租户验收。
+
+## [0.2.48] - 2026-09-15
+
+### Added
+
+- 新增受控 CLI→MCP Provider 框架，首批把钉钉官方 `dws` 的通讯录、日程、待办、文档、OA 待审批和日志查询映射为 11 个只读 MCP 工具。
+- 连接时通过官方 `dws auth status` 验证 OAuth 就绪状态，未登录、无权限或 Token 无法刷新时不误报“已连接”。
+
+### Security
+
+- CLI 只能执行代码审核的命令与参数，不经 Shell；写入动词、未声明参数和控制字符均拒绝。子进程超时、输出大小受限，成功及失败输出中的 Token/Secret 都在返回 Host 前脱敏。
+
+## [0.2.47] - 2026-09-14
+
+### Changed
+
+- 新增三张当前工具工作台宣传截图，覆盖统一工具搜索、参数详情与连接诊断；更新 Storefront 清单、来源版本与完整性哈希。
+- 将演示 GIF 更新为 43 秒六场景流程，并在中英文 README 中补齐当前能力截图。
+- 更新宣传总账、媒体发布登记和外部分发状态；记录 `dshmarket@1.46.1` 的五组搜索复验结果及 D+7/D+14 复盘日期。
+
+### Verification
+
+- 250 项自动测试通过；7 张 Storefront 截图及 43 秒演示通过哈希、尺寸、采集约束和无凭据检查；75 个发布文件通过白名单与敏感信息扫描。
+- npm/GitHub 营销元数据线上检查通过；外部目录非收敛项继续由 Issue #69 跟踪。
+
+## [0.2.46] - 2026-09-13
+
+### Changed
+
+- 重写中英文 README 首屏，围绕接入 MCP Server、跨连接工具查找和连接排障统一产品表达，并用可核验的能力表替换竞品比较文案。
+- 扩充统一工具工作台用户指南，补齐来源定位、参数阅读、发现/缓存语义、连接检查与逐连接重新发现流程。
+- 同步 npm、GitHub About、README 与外部目录的双语描述，新增 npm 250 字符商店描述上限及用户结果关键词自动校验。
+
+### Verification
+
+- 248 项自动测试通过；4 张现有 storefront 截图通过完整性和无凭据检查；72 个发布文件通过白名单与敏感信息扫描。
+
+## [0.2.45] - 2026-09-12
+
+### Added
+
+- 新增“工具”页：跨连接统一搜索、精确工具名优先、连接/服务/发现状态筛选及分页；搜索与筛选仅读取缓存，不访问远端服务。
+- 结果展示连接与服务来源、最后成功缓存时间及最近发现状态；故障连接保留缓存，并提供单连接“重新发现工具”和“检查连接”入口及已有诊断建议。
+- 参数详情增加类型、必填、枚举、约束和可展开嵌套结构；复杂或超大结构提示摘要限制，同时保留原始安全缓存 Schema。
+
+### Changed
+
+- 后台最多并发两条连接；健康连接五分钟到期，普通故障从三十秒指数退避至十五分钟，429 遵守 Retry-After，鉴权失败暂停自动重试。
+- 手动故障处理合并同连接并发请求、设置五秒冷却，不能绕过限流等待。未选择 Workspace 的工具页仅展示全局连接。
+
+### Verification
+
+- 248 项自动测试通过，覆盖工作区隔离、精确搜索、分页、只读搜索零远端请求、单连接诊断及 429 等待；72 个发布文件通过白名单与敏感内容扫描。
+- 本机无凭据模拟页面验证多服务汇总、搜索筛选、参数详情及恢复后状态同步；未执行目标工具，未更改真实 web profile。
+- 确定性调度模型中，六条健康连接持续查看十分钟从 126 次降至 18 次发现任务；此为策略模型验证，不是生产性能基准。
+
+## [0.2.44] - 2026-09-12
+
+### Added
+
+- 启动恢复及连接成功后后台发现工具，无需先打开详情；后台最多并行发现两个连接器，同一连接的并发 HTTP 发现合并。
+- 手动、JSON 导入和目录连接统一支持工具列表、搜索与详情，可按 connectionKey 精确定位；已安装页增加工具入口。
+- SSE 订阅期间每 30 秒重新发现以恢复断线状态；详情读取只读快照、重连后补同步，不形成事件刷新循环。
+
+### Fixed
+
+- 页面与 API 使用一致的搜索评分，精确工具名优先；后台发现中、读取失败与成功空列表分别展示。
+- Schema 清理区分参数名称与关键字，保留名为 default、const、examples 的合法参数；敏感默认值及示例仍不缓存。
+- 连接配置变更后失效旧缓存，忽略断开或重配期间返回的过期发现结果；查询继续遵守工作区可见范围。
+
+本次不新增目标工具执行、跨连接器搜索页面或凭据分享能力。
+
+## [0.2.43] - 2026-09-12
+
+### Added
+
+- 新增同源实时状态 SSE：连接、目录、健康、工具目录、治理和作用域发生变化后，市场页面自动刷新，无需轮询。
+- 新增“最后一次成功工具缓存”：实时 `tools/list` 或 Host 工具观测失败时仍可查看上次成功发现的工具，并明确标注缓存时间与超过 24 小时的陈旧状态。
+- 新增 `connector_hub_tool_search` 与 `connector_hub_tool_detail` 渐进式发现工具；支持按名称、标题和描述搜索，并按需读取安全裁剪后的输入参数 schema，不执行目标 MCP 工具。
+
+### Security
+
+- SSE 事件仅包含通用类别、递增序号与时间；不会发送连接标识、端点、错误、参数、结果或凭据。
+- 工具缓存按连接配置签名隔离并设置工具数、描述、schema 与总容量上限；剔除 schema 默认值和示例，断开、改配或快照恢复后清理旧缓存。
+
+## [0.2.42] - 2026-09-11
+
+### Fixed
+
+- 示例 Prompt 的“发送”动作会在 DSH 0.1.2 优先调用 `uiWorkspace.connectWorkspace`，并兼容 DSH 0.1.1 的 `workspaces.connectWorkspace` 与 `sessions.create` 安全降级；不再因工作区导航 API 迁移报错。
+
+## [0.2.41] - 2026-09-09
+
+### Added
+
+- “已安装”页为用户自定义和 JSON 导入的连接新增“编辑配置”，可修改标准化单连接 JSON 并保存后重新连接，无需先断开和删除。
+- 新增 `connector_hub_get_editable_config` 与 `connector_hub_reconfigure` 对话工具，提供相同的安全编辑和原子更新能力。
+
+### Changed
+
+- 已有 Token/API Key、Header/env 值、stdio 参数、本地路径及可能含凭据的 URL 只以 `<KEEP_EXISTING>` 返回；提交时在本机 storage-domain 内合并，也可显式替换或删除，不会将真实值发送到页面或对话。
+- 配置更新锁定 connection key 与 `serverName`，保留原连接范围和启停状态；更新前完成连接校验并创建快照，校验、Host 启动或持久化失败时原连接保持可用。
+
+### Verification
+
+- 216 项自动测试、lint、版本/营销元数据/商店截图门禁和 npm 发布包白名单/敏感内容扫描全部通过；新增覆盖敏感值保留/替换/清除、HTTP/stdio、连接身份约束、Web API、对话工具、停用状态、失败保留与快照。
+
+## [0.2.40] - 2026-09-09
+
+### Added
+
+- “已安装”页为用户自定义和 JSON 导入的 MCP 连接新增“重命名”，启用状态下也可无中断修改显示名。
+- 新增 `connector_hub_rename` 对话工具，便于按连接 key 修改显示名。
+
+### Changed
+
+- 重命名只更新本机连接元数据并创建可恢复快照；connection key、`serverName`、工具前缀、连接范围、凭据和 Host 挂载均保持不变。
+
+### Verification
+
+- 209 项自动测试、lint、版本/营销元数据/商店截图门禁和 npm 发布包白名单/敏感内容扫描全部通过；新增覆盖显示名校验、Web API、对话工具、界面入口、启用状态下无重挂载、脱敏导出、快照与重启持久化。
+
+## [0.2.39] - 2026-09-08
+
+### Fixed
+
+- 从“设置 → 插件 → 插件配置”快捷打开 MCP连接器时，将连接器弹框 Portal 到页面根层并显示在设置弹框之上；关闭后仍返回原设置位置。
+- MCP连接器位于设置弹框上方时会优先处理 Escape，只关闭最上层连接器弹框，不连带关闭底层设置弹框。
+
+### Verification
+
+- 206 项自动测试、lint、版本/营销元数据/商店截图门禁和 npm 发布包白名单/敏感内容扫描全部通过；新增覆盖连接器弹框根层 Portal、层级与嵌套弹框 Escape 行为。
+
+## [0.2.38] - 2026-09-08
+
+### Added
+
+- 在 `设置 → 插件 → 插件配置` 新增“MCP连接器”卡片，可按当前 DSH profile 显示或隐藏侧边栏入口。
+- 设置卡片新增“打开 MCP连接器”快捷动作；入口隐藏后仍可随时打开、连接和管理 MCP Server，关闭弹框后返回原操作位置。
+
+### Changed
+
+- 侧边栏可见性保存后即时生效；仅隐藏入口，不影响插件、连接、工具、后台刷新或对话内调用。
+- Settings Host 与客户端服务均采用可选注入；旧版 DSH 或服务暂不可用时安全回退为显示侧边栏，避免升级后失去入口。
+
+### Verification
+
+- 205 项自动测试、lint、版本/营销元数据/商店截图门禁和 npm 发布包白名单/敏感内容扫描全部通过；新增覆盖 Host 设置注册、客户端持久化、快捷打开、隐藏态零挂载、键盘焦点恢复和兼容回退。
+
+## [0.2.37] - 2026-09-06
+
+### Changed
+
+- “企查查·智能文档解析”改为 OAuth 2.0 PKCE 一键授权，一次授权同时启用远程在线 URL 与本地文件解析两个 Server；无需再手工复制 API Key。
+- 更新产品截图和演示 GIF，同步当前 109 张市场卡片、智能文档解析名称及 OAuth 双入口说明。
+
+### Security
+
+- 新增受限制的 OAuth-to-stdio 运行时注入：目录必须将 `oauthResource` 精确绑定到同连接器的 HTTPS MCP resource，Access Token 只注入子进程声明的 `oauthTokenEnv`，不写入连接记录、市场输出或日志。
+
+### Fixed
+
+- 从旧版 API Key 单入口升级时显示“升级一键授权”；只有 OAuth 与远程/本地两个 Server 全部启动成功后才原子替换旧连接，失败时保留旧配置。
+
+## [0.2.36] - 2026-09-06
+
+### Changed
+
+- “企查查·文档报告”更名为“企查查·智能文档解析”，产品说明、搜索标签、官网入口和示例 Prompt 调整为 OCR、文档结构化解析及 Markdown 输出场景。
+- 智能文档解析卡片改为一次录入完整 Authorization，同时配置远程在线链接 `qcc-document` 和本机文件 `qcc-document-mcp` 两个入口。
+
+### Fixed
+
+- 市场目录会比较已安装连接与卡片声明的 Server；旧版本仅安装远程入口时显示“补充本地解析”，凭据失效时显示“重新配置凭据”，不再误报完整连接或提示 OAuth 重新授权。
+- 配置页明确区分智能文档解析 API Key 与旧版企查查 OAuth 登录令牌，避免本地上传网关返回 `200215` 身份认证失败。
+
+### Verification
+
+- 196 项自动测试、lint、版本/营销元数据/商店截图门禁和 npm 发布包白名单/敏感内容扫描全部通过。
+- 远端 `qcc-document` 已用公开 PDF 完成真实解析；本地 `qcc-document-mcp` 已完成 stdio 启动和工具注册验证，并确认旧 OAuth Token 会被上传网关按预期拒绝，必须改用智能文档解析 API Key。
+
+## [0.2.35] - 2026-09-05
+
+### Fixed
+
+- 市场详情内完成免密连接、凭据配置或 OAuth 重新授权后，现在会原地重新读取连接状态与工具清单，并同步启用 Prompt 和试用按钮；用户在刷新期间主动关闭或切换详情时不会被强制重新打开。
+
+### Verification
+
+- 195 项自动测试、lint、版本/营销元数据/商店截图门禁和 npm 发布包白名单/敏感内容扫描全部通过。
+
+## [0.2.34] - 2026-09-04
+
+### Added
+
+- 用户自建连接可对 RFC1918 IPv4 / RFC4193 IPv6 ULA 字面量显式授权明文 HTTP；默认仍拒绝，公网 HTTP、域名、链路本地与元数据地址不受该开关影响。
+
+### Fixed
+
+- OAuth 一键连接现在标记资源发现、服务发现、回调监听、客户端注册、授权回调和 Token 换取阶段；DCR HTTP 403 会明确说明服务商客户端准入限制，不再误导为用户授权或凭据问题。
+- OAuth 在动态客户端注册等浏览器打开前的阶段失败时，会立即关闭本机回调监听，避免遗留端口与超时任务。
+
+## [0.2.33] - 2026-09-04
+
+### Added
+
+- 新增 Workspace project / profile global 连接作用域：新连接明确选择目标，已有连接可先预览 Server/工具影响，再复制、移动或按 revision 回滚。
+- project-only 连接通过 DSH Workspace Registry 解析 Agent 归属，并由逐 Agent `tools.restrict()` 和全局 `tools.guard()` 同时强制可见性与执行隔离。
+- 连接健康摘要新增可解释诊断：失败阶段、稳定错误码、说明、建议动作、检查时间和插件进程内最近成功时间，并同步到目录、状态、健康检查、工具发现与图形界面。
+- 新增可携带脱敏配置导出，以及连接变更前自动保存、最多保留 20 个的本机配置快照；页面和对话工具均可创建、列出、预览并原子恢复。
+- 新增 Connection / Server / Tool 三层治理策略，支持影响预览、revision 并发校验、最近 20 版回滚，以及工具增删和重命名后的安全失效处理。
+- deny 规则通过 DSH 官方逐 Agent `tools.restrict()` 收窄 schema/lookup/dispatch，并由全局 `tools.guard()` 在正式执行边界兜底；不提供只能隐藏 UI 的伪禁用。
+
+### Changed
+
+- 作用域文档与连接/凭据分离存储，只包含 connection key、Workspace id 和历史 revision；旧连接按 profile global 兼容，重新授权不会静默改变原范围。同名 Server 由不同连接管理时拒绝覆盖。
+- 已保存但尚未观察到检查结果的连接，以及 Host 暂时无法确认的 stdio 注册状态，现在明确显示“状态未知”；不再以“已配置”暗示连接可用。
+- JSON 脱敏导出会移除 Token、API Key、OAuth Grant、本地路径、Header/env 值与 stdio 参数；占位符未重填时整批拒绝导入。连接配置、导入、启停或断开失败时不保留无效快照。
+
+### Fixed
+
+- 客户端入口移除对 Host 版本特有的 Store、Runtime 和 UI Primitives 模块依赖；弹窗状态改用内置标准 Slot Store contract，避免 Windows Desktop 模块表差异导致插件树加载失败并进入 Safe Mode。
+
+### Documentation
+
+- 新增 project/global 作用域文档，说明继承、Host 强制执行、凭据单份存储、同名 Server 冲突、Workspace 删除和失败回滚边界。
+- 补充兼容矩阵、插件/Host/MCP Server 责任边界、当前限制与按诊断代码排障入口；工具试运行明确等待 DSH 官方执行、权限与审批 API。
+- 补充脱敏矩阵、快照存储边界、原子恢复流程，以及服务端 OAuth 撤销不可由本机快照逆转的责任边界。
+- 补充三层策略优先级、Host 强制执行、未知工具状态、失效规则和回滚边界。
+- 补充 DSH `rc.2` / `alpha.1` / `alpha.5` 工具执行与审批 API 证据矩阵；确认详情页直接试运行仍受 open-turn 审批编排和 MCP annotations 两项缺口阻断。
+
+### Verification
+
+- 190 项自动测试、lint、版本/营销元数据/商店截图门禁和 npm 发布包白名单/敏感内容扫描全部通过。
+
+## [0.2.32] - 2026-08-31
+
+### Fixed
+
+- 更新包已经写入 DSH profile、但当前 Host 仍运行旧插件进程时，标题区现在显示“已安装，重启后生效”，并按可信 Update Provider 的能力提供重启操作或宿主重启提示；不再重复展示同一版本的 CLI 安装命令。
+
+### Verification
+
+- 156 项自动测试、Node 20/22/24 与 Windows Node 24 CI、npm 发布包白名单/敏感内容扫描全部通过。
+
+## [0.2.31] - 2026-08-31
+
+### Fixed
+
+- 客户端 Store 优先使用 DSH `v0.1.2-alpha.1` 的静态 `@deepseek-ai/dsh-client-store` 基座，并保留 `v0.1.1` 的 `@deepseek-ai/dsh-client-runtime/client` 回退；不再把已移除的 Runtime 包错误声明为动态 external，避免 Desktop 主界面装载失败。
+
+### Verification
+
+- 154 项自动测试、Node 20/22/24 与 Windows Node 24 CI、npm 发布包白名单/敏感内容扫描全部通过。
+- CI 原包在官方 DSH `v0.1.2-alpha.1` 精确源码构建中完成主界面加载验收；Issue #26 报告者随后在 Windows Desktop Alpha.1 实机确认可正常运行。
+
+## [0.2.30] - 2026-08-30
+
+### Added
+
+- 新增营销元数据事实源与线上/离线漂移检查，统一 npm 描述与关键词、GitHub About/Topics、中英文首屏 CTA 和外部分发文案。
+- 新增贡献模板、good first issue 入口、自然搜索/转化基线与发布前监控检查。
+
+### Changed
+
+- 更新中英文产品介绍、npm 检索词与 GitHub Topics，突出 MCP Server 连接、Registry、OAuth 2.0 PKCE 与 stdio/HTTP 能力。
+- 重新录制无真实凭据的市场截图与演示 GIF：实际两列卡片布局，企查查卡片不再展示“需重新授权”。
+- 已安装但尚无连接时不再强制弹出转化引导；首次连接成功或存在历史连接后才展示，且每页面生命周期仅一次。
+
+### Verification
+
+- 152 项自动测试、lint、npm 发布包白名单/敏感内容扫描、商店素材哈希与尺寸校验通过。
+
+## [0.2.29] - 2026-08-30
+
+### Fixed
+
+- 更新服务返回 `RELEASE_TOO_FRESH` 时明确提示“发布安全等待期”，不再误写为镜像同步；主动跳过等待的操作也改为“立即更新（跳过等待）”。
+- DSH Desktop 或其他无兼容 Update Provider 的宿主直接展示精确版本升级命令，并支持一键复制与打开 npm 页面，不再只给出泛化的“查看更新方式”。
+
+## [0.2.28] - 2026-08-29
+
+### Documentation
+
+- 重写 npm 和中英文 README 首屏产品介绍，前置 MCP Server 连接、OAuth 2.0 PKCE、stdio/HTTP、Registry 与工具/Prompt 发现等高意图能力。
+- 增加 npm 下载、GitHub Star/Fork/Release 徽标、真实演示、能力对比、中文教程入口与独立贡献指南。
+- 扩充 `model-context-protocol`、`mcp-registry`、`mcp-manager`、`streamable-http` 等高意图检索词。
+
+### Verification
+
+- 新增中英文 README 与 `package.json` 版本一致性门禁和 4 项回归测试；138 项自动测试、lint 与 npm 发布包白名单/敏感内容扫描通过。
+
+## [0.2.27] - 2026-08-28
+
+### Fixed
+
+- OAuth Refresh Token 轮换不再依赖 DSH JSON storage 的进程内缓存；新增每 Grant 独立原子日志和跨进程锁，Desktop 与 `dsh web` 同时运行时只轮换一次 Token，等待方直接采用最新凭据。
+- DSH Desktop 没有插件市场设置分区时，更新入口不再停留在普通设置页；改为中性的“查看更新方式”，并在确认无市场分区后打开 npm 安装说明。
+
+### Security
+
+- 跨进程 Grant journal 位于 `$DSH_HOME/storages/connector_hub_grants_v1`，采用 0700 目录、0600 文件和同目录原子替换；Token 不进入运行日志、页面或 Git 仓库。
+
+## [0.2.26] - 2026-08-27
+
+### Fixed
+
+- 升级启动时自动发现并归并历史版本为同 issuer 卡片保存的多份 OAuth Grant；归并前先验证过期 Grant 是否仍可刷新，避免用较新但已失效的凭据覆盖可恢复授权。
+- 多个 DSH 进程并发刷新同一组轮换式 Refresh Token 时，收到 `invalid_grant` 后会短暂重读本机持久化 Grant；发现其他进程已保存新 Token 时自动采用并重试，不再误报“需重新授权”。
+- 页面不再盲信 Update Provider 的 `succeeded`；独立校验更新前、预期与实际版本，检测降级、解析版本偏差或无效结果时拒绝重启，并在 Provider 保留恢复点时自动回滚。
+
+### Verification
+
+- 129 项自动测试、lint、npm 发布包白名单与敏感内容扫描通过；新增历史 Grant 安全归并、失效候选回退、跨进程 Token 轮换恢复和 Provider 版本完整性回归测试。
+
+## [0.2.25] - 2026-08-27
+
+### Added
+
+- 新增 Update Provider 适配层，将版本发现与安装执行解耦；UI 通过统一能力调用更新检查、任务、回滚和重启，为 DSH 原生或其他插件市场预留适配边界。
+- 首个 DSH Market API v1 Provider 适配器：能力探测通过后可一键更新插件，并轮询展示安装进度、稳定失败码、兼容回滚结果及按 Web/Desktop 宿主能力提供的刷新或重启操作。
+
+### Compatibility
+
+- Provider 未安装、协议不兼容、广告跨源/无效端点或版本检查不一致时不调用私有更新路由，继续使用现有“前往插件市场”/npm 页面降级路径。
+
+### Verification
+
+- 125 项自动测试、lint、npm 发布包白名单/敏感内容扫描通过；已在 web profile 的 dshmarket 1.33.0 上验证 `/dsh-market/api/v1/capabilities` 与 Connector 版本检查响应。
+
+## [0.2.24] - 2026-08-27
+
+### Added
+
+- MCP连接器标题显示当前插件版本，并由服务端缓存检查 npm `latest` 与 GitHub Release；发现新版本时引导用户前往 DSH 插件市场安全更新。
+
+### Changed
+
+- 市场页原“刷新”按钮改为“刷新连接器目录”，明确该操作仅更新 Registry 卡片，不会升级插件本身。
+
+### Verification
+
+- 123 项自动测试、lint、npm 发布包白名单/敏感内容扫描和 npm/GitHub 真实版本源验收通过。
+
+## [0.2.23] - 2026-08-26
+
+### Fixed
+
+- OAuth Grant 现在保存 Access Token 的真实过期时间，并在提前刷新遇到网络、发现端点或服务端暂时故障时采用有上限的指数退避自动恢复；只有 `invalid_grant`、`invalid_client` 等明确不可恢复错误才显示“需重新授权”。
+- 启动恢复不再吞掉 Token 刷新异常；脱敏日志会记录阶段、OAuth 错误码、HTTP 状态与永久/暂时分类，且不会输出 Access Token、Refresh Token 或客户端密钥。
+- `grantSharing: "issuer"` 正式生效：同账号、同 issuer/scope 的卡片共享动态客户端与 Grant，后续连接同组卡片不再重复打开授权页；重新授权会把同组已连接卡片迁移到新 Grant。
+- 启动和连接前检测仍启用的 `qcc-mcp-oauth` / `qcc-legal-mcp-oauth` 及其残留 mcp-client 条目；发现同名 Server 时阻断新连接，避免旧 Token 覆盖新连接器凭据。
+
+### Verification
+
+- 新增 OAuth 刷新失败分类/脱敏/退避、暂时故障自动恢复、永久失效重新授权、同 issuer 顺序与并发共享授权、旧插件冲突阻断回归测试。
+
+## [0.2.22] - 2026-08-26
+
+### Fixed
+
+- 首次连接改为等待 `dsh-mcp-client` 完成 MCP `initialize` 与首次 `tools/list`；启动失败或超时不再提前保存、增加已安装数量或显示“已连接”。
+- stdio 健康状态与工具详情改用 Host 实际注册的 `mcp__<serverName>__*` 工具；未注册工具保持“已配置”并显示可重试诊断。
+- 手动 HTTP、免鉴权市场连接与 JSON 导入统一在落库前执行连接校验；DNS、网络、鉴权或协议失败时保留原配置且不写入无效记录。
+- 市场 Web 请求增加连接、健康检查与工具加载超时，避免详情页无限停留在“加载中”。
+
+### Verification
+
+- 新增无效 HTTP 不落库、stdio Host 启动失败回滚、Host 工具注册状态和前端有限超时回归测试。
+
+## [0.2.21] - 2026-08-25
+
+### Documentation
+
+- 产品介绍同步为公共 Registry 78 条、去重后市场 82 张卡片；新增 Registry/市场实时数量徽标。
+- 新增每小时 Registry 统计同步工作流，以 `catalog-stats.json` 为权威来源更新中英文 README 与本地快照，避免后续上架造成宣传数量过期。
+
+### Verification
+
+- 插件 100 项自动测试、lint、Registry 统计同步幂等性、npm 发布文件白名单/敏感内容扫描和 `git diff --check` 通过。
+
+## [0.2.20] - 2026-08-25
+
+### Changed
+
+- 默认公共 Registry 改用 jsDelivr CDN，并在主源请求失败时按顺序回退到 GitHub Raw，提升不同网络环境下远程市场目录的可用性。
+- DSH Bundle 补丁与插件默认配置统一使用 jsDelivr 主源；用户显式配置的自定义目录地址保持单一来源，不会被公共备用源覆盖。
+
+### Fixed
+
+- 主源与备用源分别处理缓存协商；备用源不会复用或写入主源 ETag，避免跨源缓存标识导致错误的 `304 Not Modified`。
+- 目录主源失败时记录逐源告警，并在备用源成功后继续刷新市场，避免一次网络故障导致远程目录完全不可用。
+
+### Verification
+
+- 插件 98 项自动测试、lint、npm 发布文件白名单/敏感内容扫描和 `git diff --check` 通过。
+- 新增主源失败回退、主源 `304` 不访问备用源、默认配置与 Bundle 配置一致，以及自定义目录不启用公共回退的回归测试。
+
+## [0.2.19] - 2026-08-24
+
+### Fixed
+
+- 所有对话工具结果在交给 DSH Host 前统一转换为 lossless JSON，清理 `undefined`、非有限数字、`BigInt`、稀疏数组和循环引用，修复 Windows DSH Desktop 的 `value is not lossless JSON` 错误。
+- UI 静态文件路由不再使用平台相关的 `path.normalize` 处理 URL，Windows 下保持正斜杠语义并继续拒绝路径穿越，修复市场 iframe 返回 404。
+
+### Documentation
+
+- 中英文 README 更新为公共 Registry 61 条、与 4 张随包卡片合并后 65 张市场卡片的当前规模；重新采集市场总览并重建 16 秒演示 GIF。
+
+### Verification
+
+- 插件 94 项自动测试、lint、npm 发布文件白名单/敏感内容扫描和 `git diff --check` 通过。
+- 手动执行最新 Registry `main` 的 61 项健康巡检：60 项通过、1 项部分通过；44 个远程 MCP Server 全部可达并识别成功，28 个 stdio Server 按安全策略未执行本地命令。
+
+## [0.2.18] - 2026-08-24
+
+### Added
+
+- 市场 stdio 连接器支持声明多个凭据输入字段，并将用户在本机填写的值安全绑定到指定环境变量；目录仍禁止携带真实凭据，Registry 探针仍不执行本地命令。
+- OAuth 动态客户端注册支持 `client_secret_post` 与 `client_secret_basic`，客户端密钥随本机 Grant 用于授权码交换、刷新和撤销。
+
+### Security
+
+- stdio 凭据值不进入 catalog/status/log；字段映射会校验环境变量名、未知引用、重复声明和未使用的必填字段。
+- OAuth DCR 客户端密钥不进入公开输出，并支持服务端提供的到期时间检查。
+
+## [0.2.17] - 2026-08-24
+
+### Documentation
+
+- 新增面向下载用户的完整使用手册，覆盖安装/升级与重启、市场分类、鉴权状态、自定义 HTTP/stdio、JSON 导入、连接管理、安全边界和常见故障。
+- 使用当前 14 张市场卡片与 6 张推荐位的实机界面重采 4 张公开截图，并重建 16 秒演示 GIF；同步链接 Registry 的第三方连接器上架指南。
+
+## [0.2.16] - 2026-08-24
+
+### Changed
+
+- 市场分类栏移入固定 Header 第二行，不再悬浮覆盖滚动中的卡片；切换到“已安装”时自动隐藏并收回空间。
+- 移除市场正文中的冗余连接器数量与操作提示，把市场/已安装总数改为页签内的轻量徽标。
+
+### Verification
+
+- 插件 88 项自动测试、lint 与 npm 发布文件白名单/敏感内容扫描通过。
+- 使用 UI harness 验证桌面分类标签无横向溢出；滚动后 Header 与分类栏坐标保持不变，分类点击与已安装页签切换正常。
+
+## [0.2.15] - 2026-08-24
+
+### Fixed
+
+- 未连接且目录没有工具快照的卡片详情不再误报“当前连接异常”；现在保持未连接状态，并提示连接后读取服务端工具清单。
+
+### Verification
+
+- 新增详情状态回归，插件自动测试增至 87 项；使用本机 DSH 对 Seedream 未配置详情进行实机验收。
+
+## [0.2.14] - 2026-08-24
+
+### Added
+
+- 默认“全部”市场改为“推荐 + 9 类业务分类”的章节式浏览，每章默认展示 4 张卡片并支持就地“查看全部 / 收起”。
+- 独立 Registry 新增由 Ace Data Cloud 托管的 Seedream 图片生成连接器，补齐“设计创意”分类；卡片明确第三方服务商、Bearer Token 与潜在计费边界。
+
+### Changed
+
+- 分类栏固定在市场滚动区域顶部；桌面端全部标签单行显示且不再出现横向滚动条，窄屏改为自动换行。
+- 推荐位严格收敛为 4 张企查查卡片、北大法宝和 Wind，共 6 张；其他第三方连接器仍按业务分类展示。
+- “企查查·法律数据”迁入“法律合规”，“企查查·文档报告”迁入“效率工具”并保持该分类首位。
+
+### Verification
+
+- 插件 86 项自动测试通过；Registry 10 项测试、10 条连接器构建和 schema/密钥审计通过。
+- Seedream Hosted MCP 公网无凭据探针通过：端点可达并识别 MCP，正确返回 HTTP 401 鉴权挑战；未使用用户 Token，也未执行计费工具。
+
+## [0.2.13] - 2026-08-24
+
+### Added
+
+- 当前市场已上架连接器全部进入推荐位；独立 Registry 新增 GitHub、Cloudflare、Notion、Tavily 四张经过官方配置与公开端点探针核验的推荐卡片。
+
+### Changed
+
+- 市场筛选精简为“全部 / 推荐 / 业务分类”，移除服务商下拉框和 OAuth、Key / Token、免密接入方式筛选，降低首屏信息密度。
+- 独立 Registry 的北大法宝、Wind、八爪鱼、QVeris、盈米统一使用标准分类并进入推荐位。
+
+### Verification
+
+- 84 项插件自动测试、lint、内置目录校验与 45 个 npm 发布文件白名单/敏感内容扫描通过。
+- Registry 9 项测试、9 条连接器构建、schema 校验与远程图标检查通过；GitHub、Cloudflare、Notion、Tavily 均完成 MCP 端点与鉴权元数据探针，未代替用户执行 OAuth 登录或授权后工具调用。
+
+## [0.2.12] - 2026-08-23
+
+### Added
+
+- 新增 stdio 本地进程传输：支持手工配置与 `mcpServers` JSON 导入中的 `command`、`args`、`env`、`cwd`，由现有 `@deepseek-ai/dsh-mcp-client` 原生启动并注册工具。
+- 市场 ConnectorDescriptor 与 Registry Schema 支持 stdio Server；公开目录探针只校验描述，绝不执行第三方目录中的本地命令。
+- 市场新增“推荐”与 9 类业务分类筛选，可与搜索、服务商和接入方式组合使用；未知及历史分类在 UI 端安全归一化。
+
+### Changed
+
+- 历史 `sse` 与 `type: "http"` 配置统一归一为 `streamable-http`，最终向底层只透传 `stdio` 或 `streamable-http`。
+- 状态、健康检查和详情页识别 stdio 托管连接；目录审计禁止 stdio `env` 携带 token、secret、API Key、password 等密钥类变量。
+- 同一连接切换 HTTP/stdio 传输时会清除上一种传输的 URL、Header、命令与环境变量，避免旧配置或凭据残留。
+- 随包目录统一使用“法律合规”“金融投资”等标准分类，并将北大法宝与 Wind 标记为推荐连接器。
+
+### Security
+
+- stdio 仅允许用户主动配置或安装维护者审核过的市场描述；界面明确提示本地命令执行风险，凭据型环境变量只允许保存在本机连接记录中。
+
+### Verification
+
+- 84 项自动测试、lint 与 45 个 npm 发布文件白名单/敏感内容扫描通过。
+- 使用 DSH Desktop 自带的 `@deepseek-ai/dsh-mcp-client@0.1.1-rc.2` 完成真实 stdio 运行时冒烟：受控本地 MCP 进程成功启动、注册并调用工具，`args`、`env` 与 `cwd` 透传符合预期。
+
+## [0.2.11] - 2026-08-23
+
+### Added
+
+- 新增八爪鱼云采集第三方市场卡片：通过标准 OAuth 2.1 Authorization Code + PKCE 和动态客户端注册完成一键授权，无需复制 API Key；精选 Prompt 覆盖模板搜索、任务进度、数据预览/导出，并在启动或停止云任务前要求用户确认。
+
+### Changed
+
+- OAuth 发现按 RFC 8414 元数据优先、OIDC Discovery 补充的方式合并端点，兼容动态客户端注册与撤销端点分散发布的服务。
+- 将 OAuth 撤销端点视为可选能力：服务未发布该端点时仍可授权、刷新和断开，断开时删除 DSH 本机授权记录。
+
+### Verification
+
+- 75 项自动测试与 lint 通过；新增 OAuth/OIDC 元数据合并及无撤销端点兼容回归。
+- 八爪鱼公开 MCP 端点、Protected Resource Metadata、Authorization Server Metadata、OIDC Discovery、PKCE S256 与动态客户端注册端点探针通过；Desktop 真实账户 OAuth 授权成功，枚举 1 个服务 / 12 个工具，`list_platforms` 只读调用返回成功且未创建或修改任务。
+
+## [0.2.10] - 2026-08-22
+
+### Fixed
+
+- 工具发现遇到瞬时网络断开或 MCP 5xx 时自动重试一次；鉴权、协议、4xx 和超时仍直接返回，减少 QVeris 等远程服务偶发 TLS reset 导致的连接状态误报。
+
+## [0.2.9] - 2026-08-22
+
+### Added
+
+- `tools/list` 现在在同一 MCP 会话内自动跟随 `nextCursor` 加载全部分页，并对重复游标、超过 100 页或 10,000 个工具的异常目录执行安全阻断。
+- 工具详情统一使用中文服务计数；自动识别服务商返回的 deprecated 描述，将弃用别名排到末尾并标注“已弃用”。
+
+## [0.2.8] - 2026-08-22
+
+### Fixed
+
+- 工具详情改为执行完整的 Streamable HTTP MCP 会话流程：`initialize` 后保存 `Mcp-Session-Id`，发送 `notifications/initialized`，再携带会话、协议版本和凭据请求 `tools/list`，修复 QVeris 等有状态 MCP Server 返回 HTTP 400 的问题。
+- 会话结束后尽力发送 `DELETE` 释放服务端资源；鉴权失败、限流、HTTP/协议错误继续按类型更新连接健康状态。
+
+### Registry
+
+- 将 QVeris 工具快照校正为托管端实际返回的 8 个工具；移除当前运行时不存在的 `probe`，补充 3 个兼容旧客户端的弃用别名。
+- QVeris 精选 Prompt 仅使用实际可用的 `discover`、`inspect` 和用量审计工具；未经用户明确确认仍不执行可能消耗 Credits 的 `call`/`execute_tool`。
+
+### Documentation
+
+- 统一 QVerisMCP 品牌名称，记录官方 Logo 因 `same-origin` 策略需由 Registry 自托管的 Desktop 兼容方案。
+- 将已于 `0.1.0`–`0.2.0` 完成的 v2 详情页实施计划标记为已完成/归档，避免与当前待办混淆。
+
+### Verification
+
+- 69 项自动测试、lint 与 44 个 npm 发布文件白名单/敏感内容扫描通过。
+- 使用 DSH 本机已保存的 QVeris API Key 完成真实只读验收：协议版本 `2025-03-26`、有状态会话建立成功、`tools/list` 返回 8 个工具；未执行任何付费能力调用。
+
+## [0.2.7] - 2026-08-22
+
+### Added
+
+- 市场新增“服务商 + 接入方式”组合筛选，可快速查看 OAuth、Key/Token 或免密连接器，并可与全文搜索叠加。
+- 新增 DSH 外部市场注册自动验收：每小时跟踪 PR #2633，合并后继续验证上游 YAML 与 DSH 实际 `plugins.json` 均已生效。
+
+### Registry
+
+- 独立远程 Registry 已扩展为 4 张第三方卡片、12 个 Server 和 16 个 Prompt；与随包目录合并后共 8 张已发布市场卡片。
+- 新增“盈米·基金投顾”与“QVeris·通用能力网络”；QVeris 默认先做免费发现、参数检查与零成本询价，付费 `call` 需用户明确确认。
+
+### Verification
+
+- 自动化门禁通过 69 项测试与 43 个 npm 发布文件白名单/敏感内容扫描。
+- QVeris Hosted MCP 无凭据公网探针返回预期的 HTTP 401，确认端点可达且正确要求 Bearer Key；未进行付费 `call`。
+- DSH Desktop `web` profile 已精确对齐 `dsh-connector-hub@0.2.7`；完全重启后左侧入口、中文单语界面、组合筛选和 8 张市场卡片通过，19 条连接和 4 组授权保持不变。
+
+## [0.2.6] - 2026-08-21
+
+### Documentation
+
+- 记录 `0.2.5` GitHub/npm 发布、DSH Desktop 精确版本安装、孤立 grant 自动清理与 19/19 Server 健康回归结果。
+- 扩充 GitHub Topic、仓库简介、README 和 npm 关键词，覆盖 MCP连接器、连接管理、插件/扩展、集成、Qichacha/QCC 和企查查等真实检索入口。
+- 明确“技能扩展”指 MCP 工具与 Prompt 对智能体能力的扩展，不将本包标记为独立 DSH Skill。
+
+## [0.2.5] - 2026-08-21
+
+### Changed
+
+- 同一连接器已有 OAuth 授权流程进行中时，后续重复点击复用同一 Promise，不再重复打开授权页或创建重复 grant。
+
+### Security
+
+- OAuth 重新授权成功后，撤销并删除已不再被连接引用的旧 refresh token/grant；插件启动时同步清理历史孤立 grant，仅保留当前连接仍引用的本机凭据。
+- 授权流程中途失败时清理未被连接引用的临时 grant，避免失败重试累积敏感记录。
+
+### Fixed
+
+- 修复连续或并发 OAuth 重新授权后，本机可能残留重复且未被连接引用的授权记录。
+
+### Documentation
+
+- 记录 `0.2.4` GitHub/npm 发布、DSH Desktop 精确版本安装和连接健康状态实机回归结果。
+- 记录旧企查查 OAuth 插件凭据迁移的用户确认、幂等执行和源数据保留验证结果。
+
+## [0.2.4] - 2026-08-21
+
+### Added
+
+- 新增主动连接健康检查，支持 OAuth grant、Bearer/API Key 与无鉴权 MCP initialize 握手，并以 4 并发、5 秒单连接上限避免刷新风暴。
+- 新增 `connector_hub_health_check` 对话工具和同源 Web API，可检查单个或全部已配置连接器。
+
+### Changed
+
+- 市场卡片和“已安装”列表不再把“本机存在配置”等同于“当前可用”，改为展示已配置、已连接、需重新授权、部分异常、连接异常或已停用。
+- 首次打开市场会在后台执行一次限流健康检查；用户点击“刷新”时同步刷新目录和连接状态。
+
+### Fixed
+
+- OAuth 过期/缺失或历史 Key 失效后，不再继续显示“已连接”；详情页会暂停 Prompt 发送并提供重新授权/重新配置入口。
+- 网络、DNS、TLS 或服务端异常与凭据异常分开呈现，避免误导用户重复录入 Key。
+
+## [0.2.3] - 2026-08-21
+
+### Added
+
+- 新增 4 张由无真实凭据 UI harness 生成的核心界面截图，以及约 30 秒的演示 GIF；中英文 README 均可直接预览市场、详情 Prompt、工具发现和 JSON 导入体验。
+
+### Changed
+
+- 面向中国市场将 MCP 连接器运行界面固定为中文，移除顶部 `EN` 按钮、英文 UI 字典、语言偏好持久化和切换事件；英文 README 继续作为项目文档保留。
+
+## [0.2.2] - 2026-08-21
+
+### Added
+
+- 新增英文版 README，便于国际用户了解安装、连接方式、市场目录和发布流程。
+
+### Changed
+
+- 产品名称和介绍统一为通用 MCP Connector Marketplace；企查查作为项目发起方、维护方和首批连接器提供方，不限定可接入厂商。
+- 重构 npm 关键词，保留 DSH、Cordis、MCP、OAuth/PKCE 和企查查检索入口，并补充 `dsh-plugin`、`mcp-client`、`oauth2`、`enterprise-data`。
+- 更新市场注册移交文档、测试数量和 awesome-dsh-plugin 注册描述，移除易过期的工具与 Prompt 数量。
+
+## [0.2.1] - 2026-08-21
+
+### Added
+
+- 上线独立公共 `dsh-mcp-connector-registry`，新市场卡片合并后无需重发 npm 即可被客户端刷新获取。
+- npm 发布流程切换为 GitHub Actions OIDC Trusted Publishing。
+
+### Changed
+
+- `catalogUrl` 默认指向公共 Registry，显式空字符串仍可关闭远程目录；拉取失败时保留缓存/内置目录回退。
+
+## [0.2.0] - 2026-08-21
+
+### Added
+
+- 公共市场新增第 5 张“北大法宝·法律检索”第三方卡片，以一个 Bearer Token 批量配置官网公开的 9 个 MCP Server。
+- 公共市场新增第 6 张“Wind·股票数据”第三方卡片，按万得 AIFin Market 官方配置接入股票数据 MCP Server。
+- 图形化“添加连接”：手动配置、`mcpServers` JSON、连接器描述 URL，并提供错误修复提示。
+- JSON 导入提供多行缩进示例、粘贴/手动格式化，并明确区分本机连接与市场卡片。
+- Bearer/API Key 市场连接器支持一次填写凭据后批量连接卡片下所有 Server。
+- 参数化 Prompt：发送前收集企业、人员或主题等变量，不再硬编码示例主体。
+- Tier 1 registry 种子：JSON Schema、确定性构建、无凭据 MCP/OAuth 探针和每周健康巡检。
+- 两个旧企查查 OAuth 插件的授权预览和幂等复制迁移；源插件与源凭据始终保留。
+- 本地 UI mock 测试壳和 Desktop 发版回归清单。
+- 市场注册指南，覆盖 ConnectorDescriptor、公共 registry 与 OAuth 一键授权服务端要求。
+
+### Changed
+
+- 市场 Bearer/API Key 连接器改为先验证所有 MCP Server 的连通性与凭据，通过后才进入“已安装”。
+- 精简“导入 JSON”页面，只保留格式、本机凭据说明与导入操作；市场同级卡片按目录声明顺序陈列。
+- “添加连接”默认打开并优先展示“导入 JSON”，同时缩短编辑区并固定底部操作栏，常规桌面窗口首屏即可看到导入按钮。
+- 内置精选 Prompt 直接展示可读示例值并一键带入新会话；仅缺少必填默认值时才打开参数补全弹框。
+- 未连接卡片也可查看详情；registry 提供 `toolsSnapshot` 时可在授权前预览工具。
+- 工具每批渲染 50 条、连接器每批 60 张，并保留搜索能力。
+- 增加基础中英文、系统深浅主题、焦点样式、Escape 关闭和弹框焦点循环。
+- URL 安装描述持久化，重启后仍在市场显示。
+
+### Security
+
+- 远程 JSON 响应限制 2 MiB，Web API 请求体限制 1 MiB。
+- 在 Schema 丢弃未知字段前扫描 token、API Key、secret 等夹带凭据。
+- OAuth 元数据和重定向终点执行 HTTPS/loopback 白名单；Web UI 增加 CSP、`nosniff`、`no-referrer`。
+
+### Fixed
+
+- 错误 Key、超时、DNS 或 TLS/网络失败不再被当作“已连接”，失败时保留弹框且不持久化凭据。
+- 历史凭据失效且工具全部加载失败时，详情页提供“重新配置凭据”入口并暂停发送 Prompt。
+- 未配置远程 registry 时，“刷新”不再暴露 `catalogUrl 为空`等内部实现提示。
+- Bearer/API Key 市场卡片配置成功后，市场操作按钮正确切换为“已连接”。
+- Bearer/API Key 连接器的详情页按钮直接打开凭据录入弹框，不再显示面向开发者的 `connector_hub_configure` 错误。
+- 工具详情加载时正确携带已保存的 Bearer Token/API Key，避免连接成功后仍返回 401。
+- 北大法宝卡片改用用户确认的北大法宝印章 Logo，不再显示通用天平 Emoji。
+- 参数补全弹框和发送状态提示现在始终位于连接器详情弹框之上。
+- 正确解析 `WWW-Authenticate: Bearer resource_metadata="…"` 首个参数。
+- 修复鉴权表单 `hidden` 被网格布局覆盖、无鉴权模式误显示 API Key 字段。
+
+## [0.1.0] - 2026-08-20
+
+### Added
+
+- DeepSeek Harness Desktop 左侧“MCP连接器”入口，位于“新会话”下、“工作区/会话列表”上，并提供 footer 自动降级。
+- 图形化连接器市场与已安装列表，内置 4 个企查查连接器和本地 QCC Logo。
+- OAuth 2.0 PKCE、自定义 MCP 配置、`mcpServers` JSON 导入和描述 URL 安装四条接入路径。
+- 连接持久化、重启恢复、启停、断开、OAuth Token 刷新与撤销。
+- 连接器详情弹框、按 Server 分组的工具描述/搜索/滚动，以及精选 Prompt 换一批。
+- 示例 Prompt 一键带入 DSH 新会话，包含同源校验、超时提示和重复点击保护。
+- 内置目录、远程 registry、本地覆盖、上下架与精选能力。
+- 11 个 `connector_hub_*` 对话工具。
+- Node.js 20/22/24 CI、Tag 发布工作流和 npm 发布包白名单/敏感内容校验。
+
+### Security
+
+- 凭证仅持久化在 DSH storage domain。
+- 外部 URL 与导入 Header 执行安全校验。
+- iframe 消息校验同源和消息来源。
+
+[Unreleased]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.83...HEAD
+[0.2.83]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.82...v0.2.83
+[0.2.82]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.81...v0.2.82
+[0.2.48]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.47...v0.2.48
+[0.2.47]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.46...v0.2.47
+[0.2.46]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.45...v0.2.46
+[0.2.45]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.44...v0.2.45
+[0.2.44]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.43...v0.2.44
+[0.2.43]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.42...v0.2.43
+[0.2.42]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.41...v0.2.42
+[0.2.41]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.40...v0.2.41
+[0.2.40]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.39...v0.2.40
+[0.2.39]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.38...v0.2.39
+[0.2.38]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.37...v0.2.38
+[0.2.37]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.36...v0.2.37
+[0.2.36]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.35...v0.2.36
+[0.2.35]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.34...v0.2.35
+[0.2.34]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.33...v0.2.34
+[0.2.33]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.32...v0.2.33
+[0.2.32]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.31...v0.2.32
+[0.2.31]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.30...v0.2.31
+[0.2.30]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.29...v0.2.30
+[0.2.29]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.28...v0.2.29
+[0.2.28]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.27...v0.2.28
+[0.2.27]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.26...v0.2.27
+[0.2.26]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.25...v0.2.26
+[0.2.25]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.24...v0.2.25
+[0.2.24]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.23...v0.2.24
+[0.2.23]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.22...v0.2.23
+[0.2.22]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.21...v0.2.22
+[0.2.21]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.20...v0.2.21
+[0.2.20]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.19...v0.2.20
+[0.2.19]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.18...v0.2.19
+[0.2.18]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.17...v0.2.18
+[0.2.17]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.16...v0.2.17
+[0.2.16]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.15...v0.2.16
+[0.2.15]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.14...v0.2.15
+[0.2.14]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.13...v0.2.14
+[0.2.13]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.12...v0.2.13
+[0.2.12]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.11...v0.2.12
+[0.2.11]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.10...v0.2.11
+[0.2.10]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.9...v0.2.10
+[0.2.9]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.8...v0.2.9
+[0.2.8]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.7...v0.2.8
+[0.2.7]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.6...v0.2.7
+[0.2.6]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.5...v0.2.6
+[0.2.5]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.4...v0.2.5
+[0.2.4]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.3...v0.2.4
+[0.2.3]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.2...v0.2.3
+[0.2.2]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/duhu2000/dsh-connector-hub/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/duhu2000/dsh-connector-hub/releases/tag/v0.1.0

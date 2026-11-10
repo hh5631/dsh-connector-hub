@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<title>Connector Hub</title>
+<link rel="stylesheet" href="hub.css" />
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-name">Connector Hub</div>
+      <div class="brand-sub" id="brand-sub">MCP 连接控制台</div>
+    </div>
+
+    <div class="rail-section" id="nav-label">工作台</div>
+    <nav class="nav">
+      <button type="button" data-view="connections" aria-current="page">
+        <span id="nav-connections-label">连接</span>
+        <span class="count" id="nav-connections-count"></span>
+      </button>
+      <button type="button" data-view="catalog">
+        <span id="nav-catalog-label">目录</span>
+        <span class="count" id="nav-catalog-count"></span>
+      </button>
+      <button type="button" data-view="tools">
+        <span id="nav-tools-label">工具</span>
+        <span class="count" id="nav-tools-count"></span>
+      </button>
+    </nav>
+
+    <div class="rail-foot">
+      <label class="probe-switch">
+        <input type="checkbox" id="probe-toggle" checked>
+        <span>
+          <span class="t" id="probe-label">深度业务探针</span>
+          <span class="d" id="probe-note">握手成功后追加一次只读业务调用，识别失效凭据。</span>
+        </span>
+      </label>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <h1 id="view-title">连接</h1>
+      <span class="crumb" id="section-label"></span>
+      <span class="spacer"></span>
+      <div class="search">
+        <span class="icon" aria-hidden="true">⌕</span>
+        <input id="search" type="search" autocomplete="off" placeholder="搜索连接、服务或工具…">
+      </div>
+      <button class="tbtn" type="button" id="btn-refresh">刷新</button>
+      <button class="tbtn" type="button" id="btn-check">深度检查</button>
+      <button class="tbtn strong" type="button" id="btn-add">添加连接</button>
+    </header>
+
+    <div class="content" id="content">
+      <section class="overview" id="overview">
+        <div class="overview-head">
+          <h2 id="overview-title">业务健康总览</h2>
+          <span class="sub" id="overview-sub">颜色表示业务通道的真实状态，握手成功不代表凭据有效</span>
+          <div class="stats">
+            <span class="stat ok"><b id="stat-ok">0</b>已验证</span>
+            <span class="stat warn"><b id="stat-warn">0</b>待确认</span>
+            <span class="stat bad"><b id="stat-bad">0</b>失效</span>
+          </div>
+        </div>
+        <div class="bar" id="signalbar"><i class="s-idle" style="width:100%"></i></div>
+        <div class="legend">
+          <span><i style="background:var(--ok)"></i><span id="legend-ok">业务已验证</span></span>
+          <span><i style="background:var(--warn)"></i><span id="legend-warn">待确认</span></span>
+          <span><i style="background:var(--bad)"></i><span id="legend-bad">凭据失效</span></span>
+          <span><i style="background:var(--idle)"></i><span id="legend-idle">未启用</span></span>
+        </div>
+      </section>
+
+      <div class="groupbar" id="groupbar" hidden></div>
+
+      <div class="toolbar" id="toolbar" hidden>
+        <div class="search">
+          <span class="icon" aria-hidden="true">⌕</span>
+          <input id="tool-search" type="search" autocomplete="off" placeholder="搜索工具名或描述…">
+        </div>
+        <select class="filter" id="tool-server-filter" aria-label="按服务筛选"></select>
+        <select class="filter" id="tool-status-filter" aria-label="按状态筛选"></select>
+        <span class="hint" id="tool-hint"></span>
+      </div>
+
+      <div class="section-head">
+        <h3 id="list-title">连接</h3>
+        <span class="count" id="list-count"></span>
+      </div>
+      <div class="loading" id="loading" hidden>正在读取连接状态…</div>
+      <div id="rows"></div>
+      <div class="pager" id="pager" hidden></div>
+    </div>
+  </main>
+</div>
+
+<div class="mask" id="mask" hidden></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="hub.js"></script>
+</body>
+</html>
