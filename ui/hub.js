@@ -71,7 +71,10 @@ const state = {
   busy: false,
   workspaceId: '',
   workspaces: [],
-  checked: false,
+  // 目录布局（列表 / 栅格）与「深度业务探针」开关都记在 localStorage，
+  // 刷新面板后保持用户选择；沙箱里 localStorage 不可用时静默回退默认值。
+  layout: (() => { try { return localStorage.getItem('connector-hub:layout') === 'grid' ? 'grid' : 'list'; } catch { return 'list'; } })(),
+  deepProbeEnabled: (() => { try { return localStorage.getItem('connector-hub:deep-probe') !== 'false'; } catch { return true; } })(),
 };
 
 const el = (id) => document.getElementById(id);
@@ -106,7 +109,9 @@ const I18N = {
     credentialExpiring: '凭据即将过期', credentialExpired: '凭据已过期',
     businessVerified: '业务通道已验证', businessUnknown: '业务通道未确认',
     businessInvalid: '凭据已失效：握手正常，但真实调用被拒绝',
-    deepProbe: '深度业务探针', deepProbeNote: '握手成功后追加一次只读业务调用，识别失效凭据。',
+    deepProbe: '深度业务探针', deepProbeNote: '深度检查时追加一次只读业务调用，识别失效凭据；常规刷新只做轻量握手。',
+    layoutList: '列表视图', layoutGrid: '栅格视图',
+    deepProbeOn: '深度检查将追加业务探针', deepProbeOff: '深度检查只做握手，不跑业务探针',
     hintReauth: '建议点击「修复凭据」填入新 Token，或重新授权。',
     confirmDisconnect: '确定断开这条连接吗？',
     prev: '上一页', next: '下一页', pageInfo: '第 {from}–{to} 条，共 {total} 条',
@@ -139,7 +144,9 @@ const I18N = {
     credentialExpiring: 'Credential expiring soon', credentialExpired: 'Credential expired',
     businessVerified: 'Business channel verified', businessUnknown: 'Business channel unconfirmed',
     businessInvalid: 'Credential invalid: handshake succeeded but real calls are rejected',
-    deepProbe: 'Deep business probe', deepProbeNote: 'Append a side-effect-free business probe for healthy handshakes to catch invalid credentials.',
+    deepProbe: 'Deep business probe', deepProbeNote: 'A deep check appends a side-effect-free business probe; ordinary refreshes only do a lightweight handshake.',
+    layoutList: 'List view', layoutGrid: 'Grid view',
+    deepProbeOn: 'Deep checks will include a business probe', deepProbeOff: 'Deep checks will only handshake',
     hintReauth: 'Click Fix credentials to enter a new token, or reauthorize.',
     confirmDisconnect: 'Disconnect this connection?',
     prev: 'Previous', next: 'Next', pageInfo: '{from}–{to} of {total}',
@@ -170,7 +177,7 @@ function toast(message, kind = '') {
 }
 
 /* ── 数据加载 ───────────────────────────────────────── */
-async function loadAll({ deepCheck = false } = {}) {
+async function loadAll({ check = null } = {}) {
   if (state.busy) return;
   state.busy = true;
   setLoading(true);
@@ -183,12 +190,20 @@ async function loadAll({ deepCheck = false } = {}) {
     if (statusRes.ok) state.items = statusRes.detail?.items ?? [];
     else toast(statusRes.message, 'bad');
     if (catalogRes.ok) state.catalog = catalogRes.detail?.items ?? [];
-    if (deepCheck && state.items.some((it) => it.enabled)) {
-      const check = await call('healthCheck', {});
-      toast(check.ok ? t('checkedOk') : (check.message || t('checkedFail')));
+    // 只有显式传 check 时才做健康检查：默认刷新 / SSE 刷新完全不碰 healthCheck，
+    // 因为 healthCheck 自身会发 status SSE 事件，常规刷新里调用会形成自激循环。
+    if (check) {
+      const payload = {
+        ...(check.connectorId ? { connectorId: check.connectorId } : {}),
+        deep: check.deep === true,
+        force: check.force === true,
+        ...(check.deep && !state.deepProbeEnabled ? { deepProbeEnabled: false } : {}),
+      };
+      // 不传 workspaceId / connectionKey：否则后端走 scoped 分支、不写健康缓存。
+      const res = await call('healthCheck', payload);
+      if (!check.silent) toast(res.ok ? t('checkedOk') : (res.message || t('checkedFail')), res.ok ? '' : 'bad');
       const again = await call('status', workspaceParams);
       if (again.ok) state.items = again.detail?.items ?? [];
-      state.checked = true;
     }
     if (state.view === 'tools') await loadTools();
     render();
@@ -249,6 +264,12 @@ function render() {
   el('groupbar').hidden = state.view === 'tools';
   el('toolbar').hidden = state.view !== 'tools';
   el('view-title').textContent = t(state.view === 'connections' ? 'connections' : state.view === 'catalog' ? 'catalog' : 'tools');
+  // 布局切换只在目录视图出现，并同步按钮选中态。
+  const layoutSwitch = el('layout-switch');
+  if (layoutSwitch) {
+    layoutSwitch.hidden = state.view !== 'catalog';
+    layoutSwitch.querySelectorAll('[data-layout]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.layout === state.layout)));
+  }
   const q = state.query.trim().toLowerCase();
   if (state.view === 'connections') { renderGroupBar(); renderConnections(q); }
   else if (state.view === 'catalog') { renderGroupBar(); renderCatalog(q); }
@@ -325,8 +346,8 @@ function renderPager(total, page, pageSize, onPage) {
 
 function pageSlice(list, page, pageSize) {
   const pages = Math.max(1, Math.ceil(list.length / pageSize));
+  // 数据变少时把页码收回到最后一页，调用方会写回 state.page。
   const p = Math.min(Math.max(0, page), pages - 1);
-  if (p !== page) { /* 数据变少时自动回退，由调用方写回 */ }
   return { p, items: list.slice(p * pageSize, p * pageSize + pageSize) };
 }
 
@@ -409,24 +430,41 @@ function renderCatalog(q) {
     renderPager(0, 0, state.pageSize, (p) => { state.page = p; renderCatalog(state.query.trim().toLowerCase()); });
     return;
   }
-  el('rows').innerHTML = `<div class="grid">${slice.items.map(cardHtml).join('')}</div>`;
+  const gridClass = state.layout === 'grid' ? 'grid grid-cards' : 'grid grid-list';
+  el('rows').innerHTML = `<div class="${gridClass}">${slice.items.map((c) => cardHtml(c, state.layout)).join('')}</div>`;
   renderPager(list.length, slice.p, state.pageSize, (p) => { state.page = p; renderCatalog(state.query.trim().toLowerCase()); });
 }
 
-function cardHtml(c) {
+function cardHtml(c, layout = 'list') {
   const connected = (c.connected?.length ?? 0) > 0;
-  const initial = esc(String(c.name || c.id || '?').trim().charAt(0).toUpperCase());
+  // 图标优先用目录自带 icon（URL/emoji/图标名），否则按 id / 类目挑线性矢量图标；
+  // icons.js 未加载时退回首字母，保证不会开天窗。
+  const icon = window.ConnectorIcons?.iconHtml
+    ? window.ConnectorIcons.iconHtml(c, layout === 'grid' ? 20 : 18)
+    : `<span class="ci-emoji">${esc(String(c.name || c.id || '?').trim().charAt(0).toUpperCase())}</span>`;
+  const meta = `<span>${esc(c.category || '')}</span><span>${esc(authLabel({ authMode: c.authMode }))}</span>${connected ? `<span style="color:var(--ok)">●</span>` : ''}`;
+  const foot = `<div class="tile-foot"><button class="tbtn ${connected ? '' : 'strong'}" data-act="connect" data-id="${esc(c.id)}">${connected ? t('detail') : t('connect')}</button></div>`;
+  if (layout === 'grid') {
+    return `<article class="tile">
+      <div class="tile-icon">${icon}</div>
+      <div>
+        <div class="tile-name">${esc(c.name)} <span class="chip">${esc(c.id)}</span></div>
+        <div class="tile-vendor">${esc(c.vendor || '')}</div>
+        <div class="tile-desc">${esc(c.summary || '')}</div>
+        <div class="tile-tags">${meta}</div>
+      </div>
+      ${foot}
+    </article>`;
+  }
+  // 列表视图精简列：图标 + 名称/ID + 一行简介 + 分类·鉴权 + 操作，去掉厂商独立行。
   return `<article class="tile">
-    <div class="tile-icon">${initial}</div>
+    <div class="tile-icon">${icon}</div>
     <div>
       <div class="tile-name">${esc(c.name)} <span class="chip">${esc(c.id)}</span></div>
-      <div class="tile-vendor">${esc(c.vendor || '')}</div>
-      <div class="tile-desc">${esc(c.summary || '')}</div>
-      <div class="tile-tags"><span>${esc(c.category || '')}</span><span>${esc(authLabel({ authMode: c.authMode }))}</span>${connected ? `<span style="color:var(--ok)">●</span>` : ''}</div>
+      <div class="tile-desc tile-desc-clamp">${esc(c.summary || '')}</div>
+      <div class="tile-tags">${meta}</div>
     </div>
-    <div class="tile-foot">
-      <button class="tbtn ${connected ? '' : 'strong'}" data-act="connect" data-id="${esc(c.id)}">${connected ? t('detail') : t('connect')}</button>
-    </div>
+    ${foot}
   </article>`;
 }
 
@@ -487,7 +525,11 @@ function renderToolView() {
 async function onAction(act, target) {
   const key = target.dataset.key;
   if (act === 'repair') return openRepair(key, target.dataset.mode);
-  if (act === 'recheck') { toast(t('checkedOk')); return loadAll({ deepCheck: true }); }
+  if (act === 'recheck') {
+    // 只定向检查这一条连接所属的 connector，且等结果出来再提示（不再先弹成功）。
+    const item = state.items.find((it) => it.key === key);
+    return loadAll({ check: { deep: true, force: true, ...(item?.connectorId ? { connectorId: item.connectorId } : {}) } });
+  }
   if (act === 'enable' || act === 'disable') {
     const res = await call('setEnabled', { key, enabled: act === 'enable' });
     toast(res.message);
@@ -502,17 +544,22 @@ async function onAction(act, target) {
   if (act === 'connect') {
     const res = await call('connect', { connectorId: target.dataset.id });
     toast(res.message);
-    if (res.ok) return loadAll({ deepCheck: true });
+    if (res.ok) return loadAll();
     // OAuth 缺 DCR（或 DCR 被拒）：让用户补自己登记的 client_id / secret，而不是干瞪眼。
     if (res.detail?.recoverable === 'provide-oauth-client') {
       return openOAuthClientDialog(target.dataset.id);
     }
-    if (/凭据|credential|api.?key|token/i.test(res.message || '')) return openRepair('', res.detail?.authMode || 'bearer', res.detail);
+    if (/凭据|credential|api.?key|token/i.test(res.message || '')) {
+      // 后端已在 detail 回传 connectorId；这里再兜一层，确保修复对话框拿得到 id，
+      // 否则 configure 会因空 id 落到手工连接分支而必然失败。
+      const detail = { ...(res.detail || {}), connectorId: res.detail?.connectorId || target.dataset.id };
+      return openRepair('', res.detail?.authMode || 'bearer', detail);
+    }
   }
   if (act === 'reuse-cli') {
     const res = await call('reuseCliAuth', { connectorId: target.dataset.id });
     toast(res.message);
-    return loadAll({ deepCheck: true });
+    return loadAll();
   }
 }
 
@@ -567,7 +614,7 @@ async function submitOAuthClient() {
       ...(flow ? { oauthFlow: flow } : {}),
     });
     toast(res.message);
-    if (res.ok) { closeDialog(); await loadAll({ deepCheck: true }); }
+    if (res.ok) { closeDialog(); await loadAll(); }
     else help.textContent = res.message || '';
   } finally { btn.disabled = false; }
 }
@@ -604,7 +651,7 @@ function openRepair(key, mode, connectDetail) {
     </div>
   </div>`;
   mask.hidden = false;
-  mask._ctx = { key, mode, connectDetail };
+  mask._ctx = { key, mode, connectDetail, connectorId: connectDetail?.connectorId || connectDetail?.id || '' };
   setTimeout(() => el('repair-value')?.focus(), 0);
 }
 
@@ -619,7 +666,7 @@ async function submitRepair() {
   try {
     let res;
     if (ctx.connectDetail || !ctx.key) {
-      const id = ctx.connectDetail?.connectorId || ctx.connectDetail?.id;
+      const id = ctx.connectorId || ctx.connectDetail?.connectorId || ctx.connectDetail?.id;
       res = await call('configure', { connectorId: id, bearerToken: value, apiKeyValue: value });
     } else {
       res = await call('repairCredentials', {
@@ -630,7 +677,7 @@ async function submitRepair() {
       });
     }
     toast(res.message);
-    if (res.ok) { closeDialog(); await loadAll({ deepCheck: true }); }
+    if (res.ok) { closeDialog(); await loadAll(); }
     else help.textContent = res.message || '';
   } finally { btn.disabled = false; }
 }
@@ -651,6 +698,7 @@ function openAdd() {
     </div>
   </div>`;
   mask.hidden = false;
+  mask._ctx = null;
   setTimeout(() => el('add-json')?.focus(), 0);
 }
 
@@ -664,7 +712,7 @@ async function submitAdd() {
   try {
     const res = json ? await call('importJson', { json }) : await call('installFromUrl', { url });
     toast(res.message);
-    if (res.ok) { closeDialog(); await loadAll({ deepCheck: true }); }
+    if (res.ok) { closeDialog(); await loadAll(); }
     else help.textContent = res.message || '';
   } finally { btn.disabled = false; }
 }
@@ -716,11 +764,23 @@ function bind() {
   }));
 
   el('search').addEventListener('input', (e) => { state.query = e.target.value; state.page = 0; render(); });
-  el('btn-refresh').addEventListener('click', () => loadAll());
-  el('btn-check').addEventListener('click', () => loadAll({ deepCheck: true }));
+  el('btn-refresh').addEventListener('click', () => loadAll({ check: { deep: false, force: true, silent: true } }));
+  el('btn-check').addEventListener('click', () => loadAll({ check: { deep: true, force: true } }));
   el('btn-add').addEventListener('click', openAdd);
+  // 「深度业务探针」开关：只持久化偏好，供下一次深度检查读取，不再自己触发检查。
+  el('probe-toggle').checked = state.deepProbeEnabled;
   el('probe-toggle').addEventListener('change', (e) => {
-    if (e.target.checked) loadAll({ deepCheck: true });
+    state.deepProbeEnabled = e.target.checked;
+    try { localStorage.setItem('connector-hub:deep-probe', String(e.target.checked)); } catch { /* 沙箱忽略 */ }
+    toast(e.target.checked ? t('deepProbeOn') : t('deepProbeOff'));
+  });
+  // 目录布局切换：列表 / 栅格，选择记在 localStorage。
+  el('layout-switch').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-layout]');
+    if (!btn) return;
+    state.layout = btn.dataset.layout === 'grid' ? 'grid' : 'list';
+    try { localStorage.setItem('connector-hub:layout', state.layout); } catch { /* 沙箱忽略 */ }
+    render();
   });
 
   // 分组切换
@@ -772,12 +832,12 @@ function bind() {
     else if (act === 'oauth-save') submitOAuthClient();
     else if (act === 'reuse-cli') {
       const ctx = el('mask')._ctx;
-      const connectorId = ctx?.connectDetail?.connectorId || ctx?.connectDetail?.id;
+      const connectorId = ctx?.connectorId || ctx?.connectDetail?.connectorId || ctx?.connectDetail?.id;
       if (!connectorId) return;
       el('mask').querySelector('[data-dlg="reuse-cli"]').disabled = true;
       call('reuseCliAuth', { connectorId }).then(async (res) => {
         toast(res.message);
-        if (res.ok) { closeDialog(); await loadAll({ deepCheck: true }); }
+        if (res.ok) { closeDialog(); await loadAll(); }
         else { const help = el('repair-help'); if (help) help.textContent = res.message || ''; }
       });
     }
@@ -807,6 +867,7 @@ function bind() {
   const scheduleRefresh = () => {
     if (document.hidden) return;
     clearTimeout(refreshTimer);
+    // SSE 刷新只重取状态/目录，绝不调 healthCheck（后者会再发 status 事件 → 自激循环）。
     refreshTimer = setTimeout(() => loadAll(), 150);
   };
   try {
@@ -840,6 +901,13 @@ function applyStaticText() {
   el('stat-bad-label').textContent = t('invalid');
   el('probe-label').textContent = t('deepProbe');
   el('probe-note').textContent = t('deepProbeNote');
+  const layoutSwitch = el('layout-switch');
+  if (layoutSwitch) {
+    const lb = layoutSwitch.querySelector('[data-layout="list"]');
+    const gb = layoutSwitch.querySelector('[data-layout="grid"]');
+    if (lb) { lb.title = t('layoutList'); lb.setAttribute('aria-label', t('layoutList')); }
+    if (gb) { gb.title = t('layoutGrid'); gb.setAttribute('aria-label', t('layoutGrid')); }
+  }
   el('tool-search').placeholder = t('toolSearch');
 }
 
@@ -849,7 +917,6 @@ try { applyHostFonts(window.__CONNECTOR_HUB_FONTS__); } catch { /* 独立打开�
 
 applyStaticText();
 bind();
-// 首次进入自动跑一次深度检查：面板的默认动作就是「让连接状态变真」。
-loadAll().then(() => {
-  if (state.items.some((item) => item.enabled !== false)) loadAll({ deepCheck: true });
-});
+// 首次进入只做一次轻量检查：TTL 内复用缓存、绝不跑业务探针。
+// 深度检查完全交给用户点「深度检查」或行内「重新检查」。
+loadAll({ check: { deep: false, silent: true } });

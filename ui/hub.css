@@ -359,8 +359,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .row:hover .row-actions, .row:focus-within .row-actions { opacity: 1; }
 .row-actions .tbtn { font-size: 12px; padding: 4px 8px; }
 
-/* ── 目录：索引卡式条目，序号给对齐用 ─────────────────── */
+/* ── 目录：列表 / 栅格 双布局 ────────────────────────── */
 .grid { display: flex; flex-direction: column; }
+.grid-list { gap: 0; }
+.grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
 .tile {
   display: grid; grid-template-columns: 30px minmax(0, 1fr) auto;
   gap: 14px; align-items: start;
@@ -369,19 +375,47 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border-radius: var(--r);
   transition: background .12s ease;
 }
-.tile:last-child { border-bottom: 0; }
 .tile:hover { background: var(--surface); }
+.grid-cards .tile {
+  grid-template-columns: 30px minmax(0, 1fr);
+  border: 1px solid var(--line);
+  padding: 14px;
+  background: var(--surface);
+}
+.grid-cards .tile:hover { border-color: var(--line-strong); background: var(--surface-2); }
+.grid-cards .tile-foot { grid-column: 1 / -1; padding-top: 2px; }
+.tile:last-child { border-bottom: 0; }
+.grid-cards .tile:last-child { border-bottom: 1px solid var(--line); }
 .tile-icon {
   width: 26px; height: 26px; display: grid; place-items: center;
   border: 1px solid var(--line-strong); border-radius: var(--r);
   font: 600 11px/1 var(--sans); color: var(--text-2);
-  background: var(--surface);
+  background: var(--surface); overflow: hidden;
 }
+.tile-icon svg { width: 16px; height: 16px; color: var(--accent); }
+.tile-icon .ci-img { width: 18px; height: 18px; object-fit: contain; border-radius: 3px; }
+.tile-icon .ci-emoji { font-size: 14px; line-height: 1; }
 .tile-name { font-size: 13px; font-weight: 620; letter-spacing: -.01em; }
 .tile-vendor { font-size: 11px; color: var(--text-3); margin-top: 1px; }
 .tile-desc { font-size: 12px; color: var(--text-2); margin-top: 4px; line-height: 1.5; }
+.tile-desc-clamp { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile-tags { display: flex; gap: 12px; margin-top: 7px; font-size: 11px; color: var(--text-3); flex-wrap: wrap; }
 .tile-foot { display: flex; align-items: center; gap: 10px; }
+
+/* 区块标题右侧的列表 / 栅格切换 */
+.layout-switch {
+  display: inline-flex; align-self: center;
+  border: 1px solid var(--line); border-radius: var(--r); overflow: hidden;
+}
+.layout-switch button {
+  display: inline-grid; place-items: center;
+  width: 28px; height: 24px;
+  border: 0; background: transparent; color: var(--text-3);
+  cursor: pointer; transition: background .12s ease, color .12s ease;
+}
+.layout-switch button + button { border-left: 1px solid var(--line); }
+.layout-switch button:hover { background: var(--surface-2); color: var(--text); }
+.layout-switch button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 
 /* ── 工具：筛选条 + 等宽表格 ─────────────────────────── */
 .toolbar {
