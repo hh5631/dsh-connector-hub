@@ -112,6 +112,13 @@ const I18N = {
     prev: '上一页', next: '下一页', pageInfo: '第 {from}–{to} 条，共 {total} 条',
     allServers: '全部服务', allStatus: '全部状态', statusSuccess: '已连接', statusFailed: '异常', statusUnknown: '未知', statusPending: '待发现',
     toolCount: '{count} 个工具', perPage: '每页',
+    whereToGet: '去哪里获取凭据', openGuide: '打开申请页面',
+    reuseCli: '复用本机已登录凭据', reuseCliHint: '检测到本机 {labels} 已登录，可直接复用其授权，无需手工创建 Token。',
+    cliChecking: '正在检测本机 CLI 登录状态…',
+    oauthClientTitle: '此服务不支持自动注册客户端',
+    oauthClientHint: '该服务的 OAuth 未提供动态客户端注册（DCR）。请填写你在该服务登记的 OAuth App 的 client_id（如为机密客户端还需 client_secret），之后就能用浏览器正常登录。',
+    oauthClientId: 'OAuth Client ID', oauthClientSecret: 'OAuth Client Secret（可选）',
+    oauthFlow: '授权方式', flowAuto: '自动', flowCode: '浏览器授权码', flowDevice: '设备码（输入短码）',
   },
   en: {
     connections: 'Connections', catalog: 'Catalog', tools: 'Tools', subtitle: 'MCP connection console', workspace: 'Workspace',
@@ -138,6 +145,13 @@ const I18N = {
     prev: 'Previous', next: 'Next', pageInfo: '{from}–{to} of {total}',
     allServers: 'All servers', allStatus: 'All states', statusSuccess: 'Connected', statusFailed: 'Failed', statusUnknown: 'Unknown', statusPending: 'Pending',
     toolCount: '{count} tools', perPage: 'Per page',
+    whereToGet: 'Where to get credentials', openGuide: 'Open signup page',
+    reuseCli: 'Reuse local CLI login', reuseCliHint: 'Detected a logged-in {labels} on this machine; its authorization can be reused instead of creating a token manually.',
+    cliChecking: 'Checking local CLI login state…',
+    oauthClientTitle: 'This service does not support automatic client registration',
+    oauthClientHint: 'This OAuth server does not offer Dynamic Client Registration (DCR). Enter the client_id of the OAuth App you registered with the service (plus client_secret for confidential clients) and browser sign-in will work.',
+    oauthClientId: 'OAuth Client ID', oauthClientSecret: 'OAuth Client Secret (optional)',
+    oauthFlow: 'Authorization flow', flowAuto: 'Auto', flowCode: 'Browser authorization code', flowDevice: 'Device code (enter a short code)',
   },
 };
 const t = (key, params) => {
@@ -489,8 +503,73 @@ async function onAction(act, target) {
     const res = await call('connect', { connectorId: target.dataset.id });
     toast(res.message);
     if (res.ok) return loadAll({ deepCheck: true });
+    // OAuth 缺 DCR（或 DCR 被拒）：让用户补自己登记的 client_id / secret，而不是干瞪眼。
+    if (res.detail?.recoverable === 'provide-oauth-client') {
+      return openOAuthClientDialog(target.dataset.id);
+    }
     if (/凭据|credential|api.?key|token/i.test(res.message || '')) return openRepair('', res.detail?.authMode || 'bearer', res.detail);
   }
+  if (act === 'reuse-cli') {
+    const res = await call('reuseCliAuth', { connectorId: target.dataset.id });
+    toast(res.message);
+    return loadAll({ deepCheck: true });
+  }
+}
+
+/**
+ * OAuth 客户端补充对话框。
+ *
+ * 用于服务端**没有** DCR 的场景：用户需要把在自己服务里登记过的 OAuth App
+ * 的 client_id（必要时 secret）填进来，随后仍走标准浏览器授权。
+ * 这里只把值原样交给 Host，不在前端保存、不回显。
+ */
+function openOAuthClientDialog(connectorId) {
+  const mask = el('mask');
+  mask.innerHTML = `<div class="dialog" role="dialog" aria-modal="true">
+    <h2>${esc(t('oauthClientTitle'))}</h2>
+    <p>${esc(t('oauthClientHint'))}</p>
+    <div class="field"><label>${esc(t('oauthClientId'))}</label>
+      <input id="oauth-client-id" class="mono" autocomplete="off" placeholder="Iv1.xxxxxxxxxxxx"></div>
+    <div class="field"><label>${esc(t('oauthClientSecret'))}</label>
+      <input type="password" id="oauth-client-secret" class="mono" autocomplete="off" placeholder="（机密客户端才需要）"></div>
+    <div class="field"><label>${esc(t('oauthFlow'))}</label>
+      <select id="oauth-flow">
+        <option value="">${esc(t('flowAuto'))}</option>
+        <option value="authorization-code">${esc(t('flowCode'))}</option>
+        <option value="device-code">${esc(t('flowDevice'))}</option>
+      </select></div>
+    <div class="field"><div class="help" id="oauth-client-help"></div></div>
+    <div class="dialog-actions">
+      <button class="tbtn" data-dlg="cancel">${esc(t('cancel'))}</button>
+      <button class="tbtn strong" data-dlg="oauth-save">${esc(t('connect'))}</button>
+    </div>
+  </div>`;
+  mask.hidden = false;
+  mask._ctx = { kind: 'oauth-client', connectorId };
+  setTimeout(() => el('oauth-client-id')?.focus(), 0);
+}
+
+async function submitOAuthClient() {
+  const mask = el('mask');
+  const ctx = mask._ctx;
+  const clientId = el('oauth-client-id')?.value?.trim();
+  const clientSecret = el('oauth-client-secret')?.value?.trim();
+  const flow = el('oauth-flow')?.value?.trim();
+  const help = el('oauth-client-help');
+  if (!clientId) { help.textContent = t('oauthClientId'); return; }
+  help.textContent = '';
+  const btn = mask.querySelector('[data-dlg="oauth-save"]');
+  btn.disabled = true;
+  try {
+    const res = await call('connect', {
+      connectorId: ctx.connectorId,
+      oauthClient: { clientId, ...(clientSecret ? { clientSecret } : {}) },
+      ...(flow ? { oauthFlow: flow } : {}),
+    });
+    toast(res.message);
+    if (res.ok) { closeDialog(); await loadAll({ deepCheck: true }); }
+    else help.textContent = res.message || '';
+  } finally { btn.disabled = false; }
 }
 
 function openRepair(key, mode, connectDetail) {
@@ -498,10 +577,20 @@ function openRepair(key, mode, connectDetail) {
   const isBearer = mode !== 'api-key';
   const title = connectDetail ? t('connect') : t('repairTitle');
   const hint = connectDetail ? (connectDetail.credentialDescription || t('repairHint')) : t('repairHint');
+  const guide = connectDetail?.credentialGuide;
+  const cliProviders = Array.isArray(connectDetail?.cliAuthProviders) ? connectDetail.cliAuthProviders : [];
   mask.innerHTML = `<div class="dialog" role="dialog" aria-modal="true">
     <h2>${esc(title)}</h2>
     <p>${esc(hint)}</p>
     ${connectDetail ? `<div class="field"><label>连接器</label><input class="mono" value="${esc(connectDetail.connectorId || connectDetail.id || '')}" disabled></div>` : ''}
+    ${guide?.url ? `<div class="field">
+      <label>${esc(t('whereToGet'))}</label>
+      <div class="help"><a href="${esc(guide.url)}" target="_blank" rel="noopener noreferrer">${esc(guide.label || t('openGuide'))}</a>
+      ${guide.note ? `<div style="margin-top:4px;opacity:.75">${esc(guide.note)}</div>` : ''}</div>
+    </div>` : ''}
+    ${cliProviders.length ? `<div class="field">
+      <div class="help">${esc(t('reuseCliHint', { labels: cliProviders.join(', ') }))}</div>
+    </div>` : ''}
     <div class="field">
       <label>${isBearer ? t('newToken') : t('newKey')}</label>
       <input type="password" id="repair-value" class="mono" autocomplete="off" placeholder="${isBearer ? 'API Token' : 'API Key'}">
@@ -510,6 +599,7 @@ function openRepair(key, mode, connectDetail) {
     <div class="field"><div class="help" id="repair-help"></div></div>
     <div class="dialog-actions">
       <button class="tbtn" data-dlg="cancel">${t('cancel')}</button>
+      ${cliProviders.length ? `<button class="tbtn" data-dlg="reuse-cli">${esc(t('reuseCli'))}</button>` : ''}
       <button class="tbtn strong" data-dlg="save">${t('save')}</button>
     </div>
   </div>`;
@@ -679,6 +769,18 @@ function bind() {
     const act = e.target.closest('[data-dlg]')?.dataset.dlg;
     if (act === 'cancel') closeDialog();
     else if (act === 'save') submitRepair();
+    else if (act === 'oauth-save') submitOAuthClient();
+    else if (act === 'reuse-cli') {
+      const ctx = el('mask')._ctx;
+      const connectorId = ctx?.connectDetail?.connectorId || ctx?.connectDetail?.id;
+      if (!connectorId) return;
+      el('mask').querySelector('[data-dlg="reuse-cli"]').disabled = true;
+      call('reuseCliAuth', { connectorId }).then(async (res) => {
+        toast(res.message);
+        if (res.ok) { closeDialog(); await loadAll({ deepCheck: true }); }
+        else { const help = el('repair-help'); if (help) help.textContent = res.message || ''; }
+      });
+    }
     else if (act === 'add-save') submitAdd();
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !el('mask').hidden) closeDialog(); });
