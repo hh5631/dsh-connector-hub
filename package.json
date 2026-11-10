@@ -48,7 +48,8 @@
     "lib/deep-health.js",
     "ui/hub.css",
     "ui/hub.js",
-    "test"
+    "test",
+    "docs/CREDENTIAL-PATHS.md"
   ],
   "scripts": {
     "test": "node --test test/*.test.mjs",
