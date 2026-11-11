@@ -69,8 +69,6 @@
 
 ## 安装
 
-连接器面板右上方的「检查更新」可对比本机和 GitHub 正式版本，并下载新版安装包。
-
 ```bash
 # 方式一：预构建 tarball（推荐，无需构建授权）
 dsh plugin --profile web add https://github.com/hh5631/dsh-connector-hub/releases/latest/download/dsh-connector-hub.tgz
