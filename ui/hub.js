@@ -74,8 +74,29 @@ const state = {
   // 目录布局（列表 / 栅格）与「深度业务探针」开关都记在 localStorage，
   // 刷新面板后保持用户选择；沙箱里 localStorage 不可用时静默回退默认值。
   layout: (() => { try { return localStorage.getItem('connector-hub:layout') === 'grid' ? 'grid' : 'list'; } catch { return 'list'; } })(),
-  deepProbeEnabled: (() => { try { return localStorage.getItem('connector-hub:deep-probe') !== 'false'; } catch { return true; } })(),
+  loaded: false,      // 是否已拿到过首屏数据（用于只在第一次显示 loading）
+  refreshPending: false, // 加载中又收到刷新信号时，结束后补跑一次，避免丢掉更新
 };
+
+/* 首屏快照缓存：面板是 iframe，反复开关很常见。有快照就先立刻渲染，
+   再在后台静默刷新，避免每次进来都对着空白等网络。键含 workspaceId 以免串台。 */
+const SNAPSHOT_KEY = 'connector-hub:snapshot';
+function readSnapshot() {
+  try {
+    const raw = sessionStorage.getItem(SNAPSHOT_KEY);
+    if (!raw) return null;
+    const snap = JSON.parse(raw);
+    if (!snap || !Array.isArray(snap.items) || !Array.isArray(snap.catalog)) return null;
+    return snap;
+  } catch { return null; }
+}
+function writeSnapshot() {
+  try {
+    sessionStorage.setItem(SNAPSHOT_KEY, JSON.stringify({
+      workspaceId: state.workspaceId, items: state.items, catalog: state.catalog,
+    }));
+  } catch { /* 沙箱或配额忽略 */ }
+}
 
 const el = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -109,9 +130,7 @@ const I18N = {
     credentialExpiring: '凭据即将过期', credentialExpired: '凭据已过期',
     businessVerified: '业务通道已验证', businessUnknown: '业务通道未确认',
     businessInvalid: '凭据已失效：握手正常，但真实调用被拒绝',
-    deepProbe: '深度业务探针', deepProbeNote: '深度检查时追加一次只读业务调用，识别失效凭据；常规刷新只做轻量握手。',
     layoutList: '列表视图', layoutGrid: '栅格视图',
-    deepProbeOn: '深度检查将追加业务探针', deepProbeOff: '深度检查只做握手，不跑业务探针',
     hintReauth: '建议点击「修复凭据」填入新 Token，或重新授权。',
     confirmDisconnect: '确定断开这条连接吗？',
     prev: '上一页', next: '下一页', pageInfo: '第 {from}–{to} 条，共 {total} 条',
@@ -144,9 +163,7 @@ const I18N = {
     credentialExpiring: 'Credential expiring soon', credentialExpired: 'Credential expired',
     businessVerified: 'Business channel verified', businessUnknown: 'Business channel unconfirmed',
     businessInvalid: 'Credential invalid: handshake succeeded but real calls are rejected',
-    deepProbe: 'Deep business probe', deepProbeNote: 'A deep check appends a side-effect-free business probe; ordinary refreshes only do a lightweight handshake.',
     layoutList: 'List view', layoutGrid: 'Grid view',
-    deepProbeOn: 'Deep checks will include a business probe', deepProbeOff: 'Deep checks will only handshake',
     hintReauth: 'Click Fix credentials to enter a new token, or reauthorize.',
     confirmDisconnect: 'Disconnect this connection?',
     prev: 'Previous', next: 'Next', pageInfo: '{from}–{to} of {total}',
@@ -177,37 +194,53 @@ function toast(message, kind = '') {
 }
 
 /* ── 数据加载 ───────────────────────────────────────── */
-async function loadAll({ check = null } = {}) {
-  if (state.busy) return;
+/**
+ * 只取「状态 + 目录」，永远不碰 healthCheck。
+ * healthCheck 即使轻量也要握手甚至跑探针（实测 8s+），把它放进首屏路径就是这个面板卡顿的根因；
+ * 它只由用户主动点「深度检查 / 重新检查」时通过 runHealthCheck 触发。
+ * 目录走 compact 模式（后端砍掉 prompts/servers 等大字段，313KB → ~18KB）。
+ */
+async function loadAll() {
+  if (state.busy) { state.refreshPending = true; return; }
   state.busy = true;
-  setLoading(true);
+  if (!state.loaded) setLoading(true);
   try {
     const workspaceParams = state.workspaceId ? { workspaceId: state.workspaceId } : {};
     const [statusRes, catalogRes] = await Promise.all([
       call('status', workspaceParams),
-      call('catalog', workspaceParams),
+      call('catalog', { ...workspaceParams, compact: true }),
     ]);
     if (statusRes.ok) state.items = statusRes.detail?.items ?? [];
     else toast(statusRes.message, 'bad');
     if (catalogRes.ok) state.catalog = catalogRes.detail?.items ?? [];
-    // 只有显式传 check 时才做健康检查：默认刷新 / SSE 刷新完全不碰 healthCheck，
-    // 因为 healthCheck 自身会发 status SSE 事件，常规刷新里调用会形成自激循环。
-    if (check) {
-      const payload = {
-        ...(check.connectorId ? { connectorId: check.connectorId } : {}),
-        deep: check.deep === true,
-        force: check.force === true,
-        ...(check.deep && !state.deepProbeEnabled ? { deepProbeEnabled: false } : {}),
-      };
-      // 不传 workspaceId / connectionKey：否则后端走 scoped 分支、不写健康缓存。
-      const res = await call('healthCheck', payload);
-      if (!check.silent) toast(res.ok ? t('checkedOk') : (res.message || t('checkedFail')), res.ok ? '' : 'bad');
-      const again = await call('status', workspaceParams);
-      if (again.ok) state.items = again.detail?.items ?? [];
-    }
+    state.loaded = true;
+    writeSnapshot();
     if (state.view === 'tools') await loadTools();
     render();
-  } finally { state.busy = false; setLoading(false); }
+  } finally {
+    state.busy = false;
+    setLoading(false);
+    if (state.refreshPending) { state.refreshPending = false; loadAll(); }
+  }
+}
+
+/**
+ * 主动健康检查（唯一会调 healthCheck 的入口）。
+ * 不阻塞画面：先刷新状态，检查结果回来再刷新一次列表。
+ */
+async function runHealthCheck({ connectorId = '', deep = true, silent = false } = {}) {
+  const payload = {
+    ...(connectorId ? { connectorId } : {}),
+    deep,
+    force: true,
+    // 不传 workspaceId / connectionKey：否则后端走 scoped 分支、不写健康缓存。
+  };
+  const res = await call('healthCheck', payload);
+  if (!silent) toast(res.ok ? t('checkedOk') : (res.message || t('checkedFail')), res.ok ? '' : 'bad');
+  const workspaceParams = state.workspaceId ? { workspaceId: state.workspaceId } : {};
+  const again = await call('status', workspaceParams);
+  if (again.ok) { state.items = again.detail?.items ?? []; render(); }
+  return res;
 }
 
 async function loadTools() {
@@ -515,7 +548,11 @@ function renderToolView() {
     <section class="tool-server">
       <h4>${esc(server)} <span class="n">${tools.length}</span></h4>
       <div>${tools.map((tool) => `
-        <div class="tool-row"><span class="name" title="${esc(tool.name)}">${esc(tool.name)}</span><span class="desc">${esc(tool.title || tool.description || '')}</span></div>
+        <div class="tool-row"><span class="name" title="${esc(tool.name)}">${esc(tool.name)}</span>${(() => {
+          // 远端常把 title/description 填成与名称相同的值，重复显示只是噪音。
+          const desc = String(tool.title || tool.description || '').trim();
+          return desc && desc !== tool.name ? `<span class="desc">${esc(desc)}</span>` : '';
+        })()}</div>
       `).join('')}</div>
     </section>`).join('');
   renderPager(detail?.total ?? 0, state.toolPage, state.toolPageSize, (p) => { state.toolPage = p; loadTools().then(renderToolView); });
@@ -528,7 +565,7 @@ async function onAction(act, target) {
   if (act === 'recheck') {
     // 只定向检查这一条连接所属的 connector，且等结果出来再提示（不再先弹成功）。
     const item = state.items.find((it) => it.key === key);
-    return loadAll({ check: { deep: true, force: true, ...(item?.connectorId ? { connectorId: item.connectorId } : {}) } });
+    return runHealthCheck({ deep: false, connectorId: item?.connectorId ?? '' });
   }
   if (act === 'enable' || act === 'disable') {
     const res = await call('setEnabled', { key, enabled: act === 'enable' });
@@ -759,21 +796,27 @@ function bind() {
     state.view = btn.dataset.view;
     state.page = 0;
     state.toolPage = 0;
-    if (state.view === 'tools' && !state.tools) await loadTools();
+    if (state.view === 'tools') await loadTools();
     render();
   }));
 
+  // 目录里的远程图标可能 404（含历史遗留路径、外部站点失效）：加载失败时换成内联默认图标，
+  // 用捕获阶段监听（img 的 error 不冒泡），比每个 <img> 挂 onerror 更干净。
+  document.addEventListener('error', (e) => {
+    const img = e.target;
+    if (!img || img.tagName !== 'IMG' || !img.classList?.contains('ci-img')) return;
+    const I = window.ConnectorIcons;
+    if (!I) return;
+    const span = document.createElement('span');
+    span.className = 'ci-emoji';
+    span.innerHTML = I.iconSvg(I.DEFAULT_ICON, 16);
+    img.replaceWith(span);
+  }, true);
+
   el('search').addEventListener('input', (e) => { state.query = e.target.value; state.page = 0; render(); });
-  el('btn-refresh').addEventListener('click', () => loadAll({ check: { deep: false, force: true, silent: true } }));
-  el('btn-check').addEventListener('click', () => loadAll({ check: { deep: true, force: true } }));
+  el('btn-refresh').addEventListener('click', () => loadAll());
+  el('btn-check').addEventListener('click', () => runHealthCheck({ deep: true }));
   el('btn-add').addEventListener('click', openAdd);
-  // 「深度业务探针」开关：只持久化偏好，供下一次深度检查读取，不再自己触发检查。
-  el('probe-toggle').checked = state.deepProbeEnabled;
-  el('probe-toggle').addEventListener('change', (e) => {
-    state.deepProbeEnabled = e.target.checked;
-    try { localStorage.setItem('connector-hub:deep-probe', String(e.target.checked)); } catch { /* 沙箱忽略 */ }
-    toast(e.target.checked ? t('deepProbeOn') : t('deepProbeOff'));
-  });
   // 目录布局切换：列表 / 栅格，选择记在 localStorage。
   el('layout-switch').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-layout]');
@@ -864,8 +907,13 @@ function bind() {
 
   let es;
   let refreshTimer;
-  const scheduleRefresh = () => {
+  const scheduleRefresh = (event) => {
     if (document.hidden) return;
+    // 目录/工具类事件与当前视图无关时不刷新，避免无谓的重取（目录包 18KB）。
+    let type = '';
+    try { type = JSON.parse(event?.data ?? '{}')?.type ?? ''; } catch { /* 心跳等非 JSON 忽略 */ }
+    if (type === 'catalog' && state.view !== 'catalog') return;
+    if (type === 'tools' && state.view !== 'tools') return;
     clearTimeout(refreshTimer);
     // SSE 刷新只重取状态/目录，绝不调 healthCheck（后者会再发 status 事件 → 自激循环）。
     refreshTimer = setTimeout(() => loadAll(), 150);
@@ -899,8 +947,6 @@ function applyStaticText() {
   el('stat-ok-label').textContent = t('verified');
   el('stat-warn-label').textContent = t('unknown');
   el('stat-bad-label').textContent = t('invalid');
-  el('probe-label').textContent = t('deepProbe');
-  el('probe-note').textContent = t('deepProbeNote');
   const layoutSwitch = el('layout-switch');
   if (layoutSwitch) {
     const lb = layoutSwitch.querySelector('[data-layout="list"]');
@@ -917,6 +963,13 @@ try { applyHostFonts(window.__CONNECTOR_HUB_FONTS__); } catch { /* 独立打开�
 
 applyStaticText();
 bind();
-// 首次进入只做一次轻量检查：TTL 内复用缓存、绝不跑业务探针。
-// 深度检查完全交给用户点「深度检查」或行内「重新检查」。
-loadAll({ check: { deep: false, silent: true } });
+// 首屏：有上次的快照就立刻渲染（0 等待），再静默刷新；没有就走 loadAll。
+// 只取状态 + 目录，绝不跑健康检查 —— 那是面板卡顿的根因。
+const snapshot = readSnapshot();
+if (snapshot && snapshot.workspaceId === state.workspaceId) {
+  state.items = snapshot.items;
+  state.catalog = snapshot.catalog;
+  state.loaded = true;
+  render();
+}
+loadAll();

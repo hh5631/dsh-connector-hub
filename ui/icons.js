@@ -104,11 +104,24 @@
     return DEFAULT_ICON;
   }
 
+  /**
+   * 把目录里的资源路径归一到本插件实际挂载位置。
+   * 远程目录里仍有历史遗留的 /mcp-connector/ui/assets/… 前缀（插件旧名），
+   * 直接 <img> 会 404；统一改写到 /connector-hub/ui/assets/…。
+   */
+  function normalizeAssetPath(raw) {
+    const path = String(raw || "").trim();
+    const at = path.indexOf("/ui/assets/");
+    return at >= 0 ? "/connector-hub" + path.slice(at) : path;
+  }
+
   /** 目录项自带 icon 字段时：URL/emoji 用 <img>/文本，其他当作图标名。 */
   function iconHtml(item, size) {
     const raw = item && item.icon;
     if (typeof raw === "string" && /^(https?:|data:|\/)/.test(raw.trim())) {
-      return `<img class="ci-img" src="${esc(raw)}" alt="" width="${Number(size)||16}" height="${Number(size)||16}">`;
+      const dim = Number(size) || 16;
+      // 远程图标可能失效：加载失败由 hub.js 的捕获阶段 error 监听替换成默认图标。
+      return `<img class="ci-img" src="${esc(normalizeAssetPath(raw))}" alt="" width="${dim}" height="${dim}">`;
     }
     if (typeof raw === "string" && raw.trim() && !/^[A-Za-z0-9_]+$/.test(raw.trim())) {
       // emoji 或短文本，直接展示
@@ -118,5 +131,5 @@
     return iconSvg(name, size);
   }
 
-  window.ConnectorIcons = { iconSvg, iconNameFor, iconHtml, PATHS, DEFAULT_ICON };
+  window.ConnectorIcons = { iconSvg, iconNameFor, iconHtml, normalizeAssetPath, PATHS, DEFAULT_ICON };
 })();

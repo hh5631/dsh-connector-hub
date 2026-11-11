@@ -4,10 +4,10 @@
  *      目录自带 URL icon 用 <img>；cardHtml 接上图标。
  *   2. 双布局：state.layout 决定 renderCatalog 用 grid-list / grid-cards，
  *      列表精简列（无厂商独立行）、栅格保留完整信息。
- *   3. 健康检查分层：loadAll 默认绝不调 healthCheck；只有显式传 check 才调，
- *      且 payload 不带 workspaceId/connectionKey（否则后端走 scoped 不写缓存）。
+ *   3. 健康检查分离：loadAll 永远不调 healthCheck（首屏不阻塞）；健康检查只走
+ *      runHealthCheck，payload 不带 workspaceId/connectionKey（否则后端不写缓存）。
  *   4. 逻辑 bug：connect 凭据失败时 openRepair 能拿到 connectorId（含 UI 兜底）。
- *   5. 首屏不再自动深度检查（tail 的 loadAll 是 deep:false）。
+ *   5. 首屏只 loadAll()（状态 + compact 目录），不调 healthCheck。
  */
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -109,6 +109,18 @@ test('icons.js：16 个真实 SVG 图标，按 id / 类目映射，未知名回�
   assert.match(I.iconSvg('NoSuchIcon'), /<svg/); // 未知名回退，不开天窗
 });
 
+test('图标：历史遗留的 /mcp-connector/ui/assets/ 路径改写到本插件挂载点', () => {
+  const I = window.ConnectorIcons;
+  assert.equal(
+    I.normalizeAssetPath('/mcp-connector/ui/assets/pkulaw-logo.png'),
+    '/connector-hub/ui/assets/pkulaw-logo.png',
+  );
+  assert.equal(I.normalizeAssetPath('/connector-hub/ui/assets/a.svg'), '/connector-hub/ui/assets/a.svg');
+  assert.equal(I.normalizeAssetPath('https://cdn.example.com/x.png'), 'https://cdn.example.com/x.png');
+  const html = I.iconHtml({ id: 'pkulaw-legal', icon: '/mcp-connector/ui/assets/pkulaw-logo.png' }, 16);
+  assert.ok(html.includes('src="/connector-hub/ui/assets/pkulaw-logo.png"'));
+});
+
 test('图标：目录自带 URL icon 用 <img>，emoji 用文本，普通项用内联 SVG', () => {
   const I = window.ConnectorIcons;
   assert.match(I.iconHtml({ id: 'x', icon: 'https://cdn/x.png' }), /<img class="ci-img"/);
@@ -159,35 +171,43 @@ test('loadAll：默认 / SSE 刷新绝不调 healthCheck', async () => {
   const added = fetchCalls.slice(before).map((c) => c.method);
   assert.ok(!added.includes('healthCheck'), '默认刷新不触发 healthCheck（避免 SSE 自激）');
   assert.ok(added.includes('status') && added.includes('catalog'));
+  assert.equal(fetchCalls.at(-1).params.compact ?? fetchCalls.find((c) => c.method === 'catalog').params.compact, true);
 });
 
-test('loadAll：显式 check 才调 healthCheck，且 payload 不带 workspaceId/connectionKey', async () => {
+test('runHealthCheck：唯一会调 healthCheck 的入口，payload 不带 workspaceId/connectionKey', async () => {
   run('state.busy = false; state.workspaceId = "ws-should-not-leak"');
   const before = fetchCalls.length;
-  await run('loadAll({ check: { deep: false, silent: true } })');
+  await run('runHealthCheck({ deep: true, silent: true })');
   const calls = fetchCalls.slice(before);
   const hc = calls.find((c) => c.method === 'healthCheck');
-  assert.ok(hc, '轻量检查调用了 healthCheck');
-  assert.equal(hc.params.deep, false);
-  assert.equal(hc.params.force, false);
-  assert.equal(hc.params.workspaceId, undefined, '绝不传 workspaceId（否则后端 scoped 不写缓存）');
-  assert.equal(hc.params.connectionKey, undefined);
-});
-
-test('loadAll：深度关掉业务探针开关时透传 deepProbeEnabled:false', async () => {
-  run('state.busy = false; state.workspaceId = ""; state.deepProbeEnabled = false');
-  const before = fetchCalls.length;
-  await run('loadAll({ check: { deep: true, force: true } })');
-  const hc = fetchCalls.slice(before).find((c) => c.method === 'healthCheck');
+  assert.ok(hc, 'runHealthCheck 调用了 healthCheck');
   assert.equal(hc.params.deep, true);
   assert.equal(hc.params.force, true);
-  assert.equal(hc.params.deepProbeEnabled, false);
+  assert.equal(hc.params.workspaceId, undefined, '绝不传 workspaceId（否则后端 scoped 不写缓存）');
+  assert.equal(hc.params.connectionKey, undefined);
+  assert.ok(calls.some((c) => c.method === 'status'), '检查后重新拉取状态');
 });
 
-test('首屏加载只做轻量检查（deep:false、silent），不再自动深度检查', () => {
-  assert.match(hubCode, /loadAll\(\{ check: \{ deep: false, silent: true \} \}\);\s*$/m, '文件尾是单次轻量检查');
+test('runHealthCheck：行内重新检查是定向单条、轻量', async () => {
+  run('state.busy = false; state.workspaceId = ""');
+  const before = fetchCalls.length;
+  await run('runHealthCheck({ deep: false, connectorId: "github", silent: true })');
+  const hc = fetchCalls.slice(before).find((c) => c.method === 'healthCheck');
+  assert.equal(hc.params.connectorId, 'github');
+  assert.equal(hc.params.deep, false);
+});
+
+test('首屏只 loadAll()：不调健康检查，目录走 compact 模式', async () => {
+  assert.match(hubCode, /^loadAll\(\);\s*$/m, '文件尾是裸 loadAll()');
   assert.doesNotMatch(hubCode, /deepCheck/, '旧的 deepCheck 全量深检已移除');
   assert.doesNotMatch(hubCode, /state\.checked/, '死状态 state.checked 已移除');
+  run('state.busy = false; state.workspaceId = ""');
+  const before = fetchCalls.length;
+  await run('loadAll()');
+  const calls = fetchCalls.slice(before);
+  assert.ok(!calls.some((c) => c.method === 'healthCheck'), '首屏不碰 healthCheck');
+  const cat = calls.find((c) => c.method === 'catalog');
+  assert.equal(cat.params.compact, true, '目录请求 compact，避免 313KB 大包');
 });
 
 /* ── 4. 逻辑 bug：connect 凭据失败 → openRepair 拿到 connectorId ── */

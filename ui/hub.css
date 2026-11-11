@@ -163,14 +163,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .nav button[aria-current="page"]::before { height: 14px; }
 .nav .count { margin-left: auto; font: 400 11px/1 var(--mono); color: var(--text-3); }
 
-.rail-foot { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--line); }
-.probe-switch { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; padding: 0 6px; }
-.probe-switch input {
-  margin: 2px 0 0; width: 14px; height: 14px; flex: none;
-  accent-color: var(--accent); cursor: pointer;
-}
-.probe-switch .t { font-size: 12px; color: var(--text-2); font-weight: 550; }
-.probe-switch .d { font-size: 11px; color: var(--text-3); line-height: 1.5; margin-top: 2px; }
 
 /* ── 主区 ─────────────────────────────────────────────── */
 .main { min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
