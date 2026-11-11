@@ -120,6 +120,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .topbar .crumb { font-size: 12px; color: var(--text-3); }
 .topbar .spacer { flex: 1; }
+.plugin-update-result:not([hidden]) { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; padding:8px var(--gutter); border-bottom:1px solid var(--line); background:var(--surface); color:var(--text-2); font-size:12.5px; }
+.plugin-update-result a { color:var(--accent); }
 
 .search {
   display: flex; align-items: center; gap: 7px;

@@ -19,12 +19,18 @@
         <input id="search" type="search" autocomplete="off" placeholder="搜索连接器…">
       </div>
       <button class="tbtn" type="button" id="btn-refresh">刷新</button>
+      <button class="tbtn" type="button" id="btn-check-update">检查更新</button>
       <button class="tbtn strong" type="button" id="btn-add">添加连接</button>
       <button class="tbtn connected-btn" type="button" id="btn-connected" aria-expanded="false" aria-controls="drawer">
         <span id="connected-label">已连接</span>
         <span class="count" id="connected-count"></span>
       </button>
     </header>
+    <div class="plugin-update-result" id="plugin-update-result" hidden>
+      <span id="plugin-update-status" role="status"></span>
+      <a id="plugin-update-download" target="_blank" rel="noreferrer" hidden>下载安装包</a>
+      <a id="plugin-update-release" target="_blank" rel="noreferrer" hidden>查看发行页</a>
+    </div>
 
     <div class="content" id="content">
       <div class="groupbar" id="groupbar" hidden></div>

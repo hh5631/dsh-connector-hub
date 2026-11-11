@@ -111,6 +111,9 @@ const I18N = {
   'zh-CN': {
     brand: '连接器', subtitle: '外部服务接入', catalog: '目录',
     search: '搜索连接器…', refresh: '刷新', add: '添加连接',
+    checkUpdate: '检查更新', checkingUpdate: '正在检查…', updateFailed: '检查失败，请稍后重试，或打开 GitHub 发行页。',
+    updateVersions: '当前 v{current} · 最新 v{latest} · {status}', updateAvailable: '发现新版', updateCurrent: '已是最新版本', updateAhead: '当前版本较新',
+    downloadUpdate: '下载安装包', updateReleases: '查看发行页',
     connected: '已连接', connectedTitle: '已连接的应用', close: '关闭',
     connectedEmpty: '还没有连接任何应用', connectedEmptyHint: '在上方目录里挑一个，点「连接」即可。',
     noCatalog: '目录为空', noCatalogHint: '检查网络，或点「刷新」重新拉取目录。',
@@ -141,6 +144,9 @@ const I18N = {
   en: {
     brand: 'Connector', subtitle: 'External service access', catalog: 'Catalog',
     search: 'Search connectors…', refresh: 'Refresh', add: 'Add connection',
+    checkUpdate: 'Check for updates', checkingUpdate: 'Checking…', updateFailed: 'Could not check for updates. Try again or open GitHub Releases.',
+    updateVersions: 'Current v{current} · Latest v{latest} · {status}', updateAvailable: 'Update available', updateCurrent: 'Up to date', updateAhead: 'Local version is newer',
+    downloadUpdate: 'Download package', updateReleases: 'View releases',
     connected: 'Connected', connectedTitle: 'Connected apps', close: 'Close',
     connectedEmpty: 'Nothing connected yet', connectedEmptyHint: 'Pick one from the catalog above and hit Connect.',
     noCatalog: 'Catalog is empty', noCatalogHint: 'Check the network, or press Refresh to reload.',
@@ -655,6 +661,36 @@ function applyHostFonts(fonts) {
   setSize('--dsh-terminal-font-size', fonts.terminalSize);
 }
 
+async function checkPluginUpdate() {
+  const button = el('btn-check-update');
+  if (button.disabled) return;
+  const result = el('plugin-update-result');
+  const status = el('plugin-update-status');
+  const download = el('plugin-update-download');
+  const release = el('plugin-update-release');
+  button.disabled = true;
+  result.hidden = false;
+  download.hidden = release.hidden = true;
+  status.textContent = t('checkingUpdate');
+  release.href = 'https://github.com/hh5631/dsh-connector-hub/releases';
+  try {
+    const response = await fetch('/api/dsh-connector-hub/update-check', {
+      credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(12000),
+    });
+    if (!response.ok) throw new Error('Update endpoint unavailable');
+    const info = await response.json();
+    if (info?.ok !== true) {
+      status.textContent = (info?.current ? `v${info.current} · ` : '') + t('updateFailed');
+      return;
+    }
+    const key = info.status === 'available' ? 'updateAvailable' : info.status === 'ahead' ? 'updateAhead' : 'updateCurrent';
+    status.textContent = t('updateVersions', { current: info.current, latest: info.latest, status: t(key) });
+    release.href = info.releaseUrl;
+    if (info.downloadUrl) { download.href = info.downloadUrl; download.hidden = false; }
+  } catch { status.textContent = t('updateFailed'); }
+  finally { release.hidden = false; button.disabled = false; }
+}
+
 /* ── 事件绑定 ───────────────────────────────────────── */
 function bind() {
   // 目录里的远程图标可能 404（含历史遗留路径、外部站点失效）：加载失败时换成内联默认图标，
@@ -672,6 +708,7 @@ function bind() {
 
   el('search').addEventListener('input', (e) => { state.query = e.target.value; state.page = 0; render(); });
   el('btn-refresh').addEventListener('click', () => loadAll());
+  el('btn-check-update').addEventListener('click', () => void checkPluginUpdate());
   el('btn-add').addEventListener('click', openAdd);
 
   // 已连接抽屉
@@ -783,6 +820,9 @@ function applyStaticText() {
   el('section-label').textContent = t('subtitle');
   el('search').placeholder = t('search');
   el('btn-refresh').textContent = t('refresh');
+  el('btn-check-update').textContent = t('checkUpdate');
+  el('plugin-update-download').textContent = t('downloadUpdate');
+  el('plugin-update-release').textContent = t('updateReleases');
   el('btn-add').textContent = t('add');
   el('connected-label').textContent = t('connected');
   el('drawer-title').textContent = t('connectedTitle');
