@@ -1,3 +1,9 @@
+/**
+ * hub.js 纯函数逻辑回归（v5）
+ *
+ * v5 只有「目录」一个视图：分组、分页、卡片、字体同步都基于 catalog 计算。
+ * 工具视图、左侧导航、健康检查已移除，对应断言不再存在。
+ */
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
@@ -26,6 +32,7 @@ const document = {
       getPropertyValue: (k) => rootStyleProps.get(k) ?? '',
     },
   },
+  body: { classList: { add() {}, remove() {} } },
   getElementById: get,
   querySelectorAll: () => [],
   addEventListener() {},
@@ -45,13 +52,12 @@ const fetchImpl = async (url, opts) => {
   const detail = (items) => ({ ok: true, detail: { items } });
   if (body.method === 'status') return { ok: true, json: async () => detail([]) };
   if (body.method === 'catalog') return { ok: true, json: async () => detail([]) };
-  if (body.method === 'toolExplorer') return { ok: true, json: async () => ({ ok: true, detail: { total: 0, items: [], connections: [] } }) };
   return { ok: true, json: async () => ({ ok: true, detail: {} }) };
 };
 class EventSource { addEventListener() {} close() {} }
 const ctx = {
   document, window, location, fetch: fetchImpl, EventSource,
-  URLSearchParams, setTimeout, clearTimeout, setTimeout, AbortController,
+  URLSearchParams, setTimeout, clearTimeout, AbortController,
   confirm: () => false, console,
 };
 ctx.globalThis = ctx;
@@ -60,69 +66,114 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const code = readFileSync(join(root, 'ui/hub.js'), 'utf8');
 vm.runInContext(code, ctx, { filename: 'hub.js' });
 
-// ── 断言 ──────────────────────────────────────────────
 test('hub.js UI 逻辑', async () => {
-const run = (expr) => vm.runInContext(expr, ctx);
-const S = new Proxy({}, {
-  get: (_, k) => run(`state.${String(k)}`),
-  set: (_, k, v) => { ctx.__tmp = v; run(`state.${String(k)} = globalThis.__tmp`); return true; },
-});
+  const run = (expr) => vm.runInContext(expr, ctx);
+  const S = new Proxy({}, {
+    get: (_, k) => run(`state.${String(k)}`),
+    set: (_, k, v) => { ctx.__tmp = v; run(`state.${String(k)} = globalThis.__tmp`); return true; },
+  });
 
   assert(S !== undefined, 'state 初始化');
-  assert(S.pageSize === 8, '连接每页 8 条');
-  assert(S.toolPageSize === 20, '工具每页 20 条');
+  assert(S.pageSize === 12, '目录每页 12 条');
 
-// 分页切片
-  S.items = Array.from({ length: 20 }, (_, i) => ({ key: `k${i}`, name: `连接${i}`, connectorId: 'x', serverName: 's', endpoint: '', authMode: 'none', enabled: true, kind: 'manual' }));
-  S.catalog = [{ id: 'x', category: '开发工具' }];
+  // ── 目录分页 ──
+  S.catalog = Array.from({ length: 30 }, (_, i) => ({
+    id: `c${i}`, name: `连接器${i}`, category: '开发工具', authMode: 'none',
+    vendor: 'v', summary: 's', connected: [],
+  }));
   S.group = 'all'; S.page = 0; S.query = '';
-ctx.renderConnections('');
-  let rows = (get('rows').innerHTML.match(/class="row"/g) || []).length;
-  assert(rows === 8, `第 1 页渲染 8 行（实际 ${rows}）`);
-  assert(get('pager').hidden === false, '分页器显示');
-  assert(get('pager').innerHTML.includes('第 1–8 条，共 20 条'), '分页文案正确: ' + get('pager').innerHTML.match(/第[^<]*/)?.[0]);
+  ctx.renderCatalog('');
+  let tiles = (get('rows').innerHTML.match(/class="tile"/g) || []).length;
+  assert.equal(tiles, 12, `第 1 页渲染 12 张卡（实际 ${tiles}）`);
+  assert.equal(get('pager').hidden, false, '分页器显示');
+  assert.ok(get('pager').innerHTML.includes('第 1–12 条，共 30 条'), '分页文案正确: ' + get('pager').innerHTML.match(/第[^<]*/)?.[0]);
 
   S.page = 2;
-ctx.renderConnections('');
-  rows = (get('rows').innerHTML.match(/class="row"/g) || []).length;
-  assert(rows === 4, `第 3 页渲染 4 行（实际 ${rows}）`);
-  assert(get('pager').innerHTML.includes('第 17–20 条'), '末页文案正确');
+  ctx.renderCatalog('');
+  tiles = (get('rows').innerHTML.match(/class="tile"/g) || []).length;
+  assert.equal(tiles, 6, `第 3 页渲染 6 张卡（实际 ${tiles}）`);
+  assert.ok(get('pager').innerHTML.includes('第 25–30 条'), '末页文案正确');
 
-// 分组：把 20 条分到两个分类
-  S.items = Array.from({ length: 20 }, (_, i) => ({ key: `k${i}`, name: `连接${i}`, connectorId: i < 10 ? 'a' : 'b', serverName: 's', endpoint: '', authMode: 'none', enabled: true, kind: 'manual' }));
-  S.catalog = [{ id: 'a', category: '开发工具' }, { id: 'b', category: '设计创意' }];
-  S.page = 0;
-ctx.renderGroupBar();
+  // 数据变少时页码自动收回最后一页
+  S.catalog = S.catalog.slice(0, 13);
+  S.page = 2;
+  ctx.renderCatalog('');
+  assert.equal(S.page, 1, '页码越界回落到最后一页');
+
+  // ── 搜索过滤 ──
+  S.catalog = [
+    { id: 'github', name: 'GitHub', category: '开发工具', authMode: 'bearer', vendor: 'GitHub', summary: '代码托管', connected: [] },
+    { id: 'figma', name: 'Figma', category: '设计创意', authMode: 'oauth2-pkce', vendor: 'Figma', summary: '设计协作', connected: [] },
+  ];
+  S.group = 'all'; S.page = 0;
+  ctx.renderCatalog('fig');
+  assert.equal((get('rows').innerHTML.match(/class="tile"/g) || []).length, 1, '搜索命中 1 条');
+  assert.ok(get('rows').innerHTML.includes('Figma'));
+
+  // ── 分组条：按目录统计，只显示非空组 ──
+  S.catalog = [
+    { id: 'a', name: 'A', category: '开发工具', authMode: 'none', connected: [] },
+    { id: 'b', name: 'B', category: '设计创意', authMode: 'none', connected: [] },
+  ];
+  S.query = '';
+  ctx.renderGroupBar();
   const bar = get('groupbar').innerHTML;
-  assert(bar.includes('data-group="dev"') && bar.includes('data-group="design"'), '分组条含 开发/设计 两组');
-  assert(bar.includes('data-group="all"'), '分组条含「全部」');
-  S.group = 'dev';
-ctx.renderConnections('');
-  rows = (get('rows').innerHTML.match(/class="row"/g) || []).length;
-  assert(rows === 8, `切到「开发工具」组后按 8 条分页（实际 ${rows}）`);
-  assert(get('list-title').textContent === '开发工具', '分组标题正确: ' + get('list-title').textContent);
+  assert.ok(bar.includes('data-group="dev"') && bar.includes('data-group="design"'), '分组条含 开发/设计 两组');
+  assert.ok(bar.includes('data-group="all"'), '分组条含「全部」');
+  assert.equal(get('groupbar').hidden, false, '有数据时显示分组条');
 
-// 目录分页
-  S.catalog = Array.from({ length: 33 }, (_, i) => ({ id: `c${i}`, name: `连接器${i}`, category: '开发工具', authMode: 'none', vendor: 'v', summary: 's', connected: [] }));
-  S.view = 'catalog'; S.group = 'all'; S.page = 0; S.query = '';
-ctx.renderCatalog('');
-  rows = (get('rows').innerHTML.match(/class="tile"/g) || []).length;
-  assert(rows === 8, `目录第 1 页 8 条（实际 ${rows}）`);
-  assert(get('pager').innerHTML.includes('共 33 条'), '目录分页总数正确');
+  // 切到某组后标题换成组名
+  S.group = 'dev'; S.page = 0;
+  ctx.renderCatalog('');
+  assert.equal(get('list-title').textContent, '开发工具', '分组标题正确: ' + get('list-title').textContent);
+  assert.equal((get('rows').innerHTML.match(/class="tile"/g) || []).length, 1, '分组只显示该组条目');
 
-// 分组标签与分类映射
-// 目录分页测试覆盖了 catalog，这里重设回带分类的数据再验 groupOf
+  // 空目录 → 分组条隐藏
+  S.catalog = []; S.group = 'all';
+  ctx.renderGroupBar();
+  assert.equal(get('groupbar').hidden, true, '目录为空时隐藏分组条');
+
+  // ── 分类映射 ──
   S.catalog = [{ id: 'a', category: '开发工具' }, { id: 'b', category: '设计创意' }];
-  assert(run(`groupOf({ connectorId: 'a', kind: 'manual' })`) === 'dev', 'groupOf 映射 开发工具');
-  assert(run(`groupOf({ connectorId: 'b', kind: 'manual' })`) === 'design', 'groupOf 映射 设计创意');
-  assert(run(`groupOf({ connectorId: 'zz', kind: 'manual' })`) === 'custom', 'groupOf 未匹配归 自定义');
-  assert(run(`groupLabel('design')`) === '设计创意', 'groupLabel 中文');
+  assert.equal(run(`groupOf({ connectorId: 'a', kind: 'manual' })`), 'dev', 'groupOf 映射 开发工具');
+  assert.equal(run(`groupOf({ connectorId: 'b', kind: 'manual' })`), 'design', 'groupOf 映射 设计创意');
+  assert.equal(run(`groupOf({ connectorId: 'zz', kind: 'manual' })`), 'custom', 'groupOf 未匹配归 自定义');
+  assert.equal(run(`groupOf({ connectorId: 'a', kind: 'catalog' })`), 'dev', 'groupOf 目录来源按 category 映射');
+  assert.equal(run(`groupLabel('design')`), '设计创意', 'groupLabel 中文');
+  assert.equal(run(`CATEGORY_GROUP['地图出行']`), 'efficiency', '未知中文类目有兜底映射');
+
+  // ── 已连接标记 ──
+  S.catalog = [
+    { id: 'github', name: 'GitHub', category: '开发工具', authMode: 'bearer', connected: ['github-1'] },
+    { id: 'figma', name: 'Figma', category: '设计创意', authMode: 'oauth2-pkce', connected: [] },
+  ];
+  S.group = 'all'; S.page = 0;
+  ctx.renderCatalog('');
+  const html = get('rows').innerHTML;
+  assert.ok(html.includes('data-connected="1"'), '已连接的目录项带 data-connected');
+  assert.equal((html.match(/data-connected="1"/g) || []).length, 1, '只有已连接的那条被标记');
+
+  // ── 抽屉：已连接列表 ──
+  S.items = [
+    { key: 'k1', name: 'GitHub', connectorId: 'github', serverName: 'github', authMode: 'bearer', enabled: true, connectionState: 'healthy' },
+    { key: 'k2', name: '高德', connectorId: 'amap', serverName: 'amap', authMode: 'api-key', enabled: true, connectionState: 'reauth' },
+  ];
+  ctx.renderDrawer();
+  const drawer = get('drawer-rows').innerHTML;
+  assert.equal((drawer.match(/class="row"/g) || []).length, 2, '抽屉渲染 2 条连接');
+  assert.ok(drawer.includes('data-readiness="credential-invalid"'), '失效凭据标记为 credential-invalid');
+  assert.ok(get('drawer-stats').innerHTML.includes('stat bad'), '异常计数出现在抽屉统计里');
+  assert.ok(get('drawer-stats').innerHTML.includes('异常'), '异常计数带文案');
+
+  S.items = [];
+  ctx.renderDrawer();
+  assert.ok(get('drawer-rows').innerHTML.includes('empty'), '无连接时展示空状态');
 
   // ── 宿主字体同步（消息端到端另见 font-sync.test.mjs）──
   ctx.applyHostFonts({ text: '"Noto Sans", sans-serif', code: '"JetBrains Mono", monospace', contentSize: '16px' });
-  assert(rootStyleProps.get('--dsh-font-family-text') === '"Noto Sans", sans-serif', '字体：text 写入 :root');
-  assert(rootStyleProps.get('--dsh-font-family-code') === '"JetBrains Mono", monospace', '字体：code 写入 :root');
-  assert(rootStyleProps.get('--dsh-content-font-size') === '16px', '字体：字号写入 :root');
+  assert.equal(rootStyleProps.get('--dsh-font-family-text'), '"Noto Sans", sans-serif', '字体：text 写入 :root');
+  assert.equal(rootStyleProps.get('--dsh-font-family-code'), '"JetBrains Mono", monospace', '字体：code 写入 :root');
+  assert.equal(rootStyleProps.get('--dsh-content-font-size'), '16px', '字体：字号写入 :root');
 
   ctx.applyHostFonts({ text: '', code: '', contentSize: '' });
   assert(!rootStyleProps.has('--dsh-font-family-text'), '字体：空值移除属性（回退系统栈）');
@@ -132,15 +183,5 @@ ctx.renderCatalog('');
   assert(!rootStyleProps.has('--dsh-font-family-code'), '字体：非字符串入参被忽略');
 
   ctx.applyHostFonts({ text: 'x'.repeat(999), code: 'ok', contentSize: '16px' });
-  assert(rootStyleProps.get('--dsh-font-family-text').length === 400, '字体：超长值被截断到 400');
-
-  // ── 工具筛选参数 ──
-  S.toolQuery = 'seedance'; S.toolServer = 'hub-seedance'; S.toolStatus = 'success'; S.toolPage = 2;
-await ctx.loadTools();
-  const toolCall = fetchCalls.filter((c) => c.method === 'toolExplorer').pop();
-  assert(toolCall.params.query === 'seedance', '工具搜索词发给服务端');
-  assert(toolCall.params.serverName === 'hub-seedance', '服务筛选发给服务端');
-  assert(toolCall.params.status === 'success', '状态筛选发给服务端');
-  assert(toolCall.params.offset === 40 && toolCall.params.limit === 20, '工具分页 offset/limit 正确');
-
+  assert.equal(rootStyleProps.get('--dsh-font-family-text').length, 400, '字体：超长值被截断到 400');
 });

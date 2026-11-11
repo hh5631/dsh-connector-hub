@@ -9,86 +9,31 @@
 </head>
 <body>
 <div class="shell">
-  <aside class="rail">
-    <div class="brand">
-      <span class="brand-mark" aria-hidden="true">
-        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-      </span>
-      <span class="brand-text">
-        <span class="brand-name" id="brand-name">连接器</span>
-        <span class="brand-sub" id="brand-sub">外部服务接入控制台</span>
-      </span>
-    </div>
-
-    <div class="rail-section" id="nav-label">工作台</div>
-    <nav class="nav">
-      <button type="button" data-view="connections" aria-current="page">
-        <span id="nav-connections-label">连接</span>
-        <span class="count" id="nav-connections-count"></span>
-      </button>
-      <button type="button" data-view="catalog">
-        <span id="nav-catalog-label">目录</span>
-        <span class="count" id="nav-catalog-count"></span>
-      </button>
-      <button type="button" data-view="tools">
-        <span id="nav-tools-label">工具</span>
-        <span class="count" id="nav-tools-count"></span>
-      </button>
-    </nav>
-
-  </aside>
-
   <main class="main">
     <header class="topbar">
-      <h1 id="view-title">连接</h1>
-      <span class="crumb" id="section-label"></span>
+      <h1 id="view-title">连接器</h1>
+      <span class="crumb" id="section-label">外部服务接入</span>
       <span class="spacer"></span>
       <div class="search">
         <span class="icon" aria-hidden="true">⌕</span>
-        <input id="search" type="search" autocomplete="off" placeholder="搜索连接、服务或工具…">
+        <input id="search" type="search" autocomplete="off" placeholder="搜索连接器…">
       </div>
       <button class="tbtn" type="button" id="btn-refresh">刷新</button>
-      <button class="tbtn" type="button" id="btn-check">深度检查</button>
       <button class="tbtn strong" type="button" id="btn-add">添加连接</button>
+      <button class="tbtn connected-btn" type="button" id="btn-connected" aria-expanded="false" aria-controls="drawer">
+        <span id="connected-label">已连接</span>
+        <span class="count" id="connected-count"></span>
+      </button>
     </header>
 
     <div class="content" id="content">
-      <section class="overview" id="overview">
-        <div class="overview-head">
-          <h2 id="overview-title">业务健康总览</h2>
-          <span class="sub" id="overview-sub">颜色表示业务通道的真实状态，握手成功不代表凭据有效</span>
-          <div class="stats">
-            <span class="stat ok"><b id="stat-ok">0</b><span id="stat-ok-label">已验证</span></span>
-            <span class="stat warn"><b id="stat-warn">0</b><span id="stat-warn-label">待确认</span></span>
-            <span class="stat bad"><b id="stat-bad">0</b><span id="stat-bad-label">失效</span></span>
-          </div>
-        </div>
-        <div class="bar" id="signalbar"><i class="s-idle" style="width:100%"></i></div>
-        <div class="legend">
-          <span><i style="background:var(--ok)"></i><span id="legend-ok">业务已验证</span></span>
-          <span><i style="background:var(--warn)"></i><span id="legend-warn">待确认</span></span>
-          <span><i style="background:var(--bad)"></i><span id="legend-bad">凭据失效</span></span>
-          <span><i style="background:var(--idle)"></i><span id="legend-idle">未启用</span></span>
-        </div>
-      </section>
-
       <div class="groupbar" id="groupbar" hidden></div>
 
-      <div class="toolbar" id="toolbar" hidden>
-        <div class="search">
-          <span class="icon" aria-hidden="true">⌕</span>
-          <input id="tool-search" type="search" autocomplete="off" placeholder="搜索工具名或描述…">
-        </div>
-        <select class="filter" id="tool-server-filter" aria-label="按服务筛选"></select>
-        <select class="filter" id="tool-status-filter" aria-label="按状态筛选"></select>
-        <span class="hint" id="tool-hint"></span>
-      </div>
-
       <div class="section-head">
-        <h3 id="list-title">连接</h3>
+        <h3 id="list-title">目录</h3>
         <span class="count" id="list-count"></span>
         <span class="spacer"></span>
-        <div class="layout-switch" id="layout-switch" hidden role="group" aria-label="视图">
+        <div class="layout-switch" id="layout-switch" role="group" aria-label="视图">
           <button type="button" data-layout="list" aria-pressed="true" title="列表视图">
             <svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M3 5h14v2H3V5zm0 4h14v2H3V9zm0 4h14v2H3v-2z"/></svg>
           </button>
@@ -97,12 +42,22 @@
           </button>
         </div>
       </div>
-      <div class="loading" id="loading" hidden>正在读取连接状态…</div>
+      <div class="loading" id="loading" hidden>正在读取…</div>
       <div id="rows"></div>
       <div class="pager" id="pager" hidden></div>
     </div>
   </main>
 </div>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" aria-labelledby="drawer-title" hidden>
+  <div class="drawer-head">
+    <h2 id="drawer-title">已连接</h2>
+    <button class="tbtn" type="button" id="drawer-close">关闭</button>
+  </div>
+  <div class="drawer-stats" id="drawer-stats"></div>
+  <div class="drawer-body" id="drawer-rows"></div>
+</aside>
 
 <div class="mask" id="mask" hidden></div>
 <div class="toast" id="toast" hidden></div>

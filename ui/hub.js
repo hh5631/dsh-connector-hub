@@ -1,6 +1,12 @@
-/* 连接器控制台 — 面板逻辑 v4
- * 契约：POST /connector-hub/api  {method, params}；GET /connector-hub/events（SSE invalidation）。
+/* 连接器 — 面板逻辑 v5（极简）
+ *
+ * 契约：POST /connector-hub/api  {method, params}；GET /connector-hub/events（SSE）。
  * 业务失败 = HTTP 200 + {ok:false, message}。所有状态枚举按值判断，文案只展示不解析。
+ *
+ * v5 相比 v4 做的减法：
+ *   - 只有「目录」一个视图；工具视图、左侧导航、健康检查全部移除。
+ *   - 已连接的应用收进右上角抽屉，点开才渲染。
+ *   - 永不调用 healthCheck（那个接口要握手甚至跑探针，是卡顿根因）。
  * 本文件不读取、不回显任何凭据；修复凭据时只把用户新输入的值发给 repairCredentials。
  */
 
@@ -10,8 +16,7 @@ const EVENTS = '/connector-hub/events';
 const TIMEOUTS = {
   connect: 145000, configure: 145000, importJson: 145000, installFromUrl: 145000,
   repairCredentials: 145000, reconfigureConnection: 145000, restoreSnapshot: 145000,
-  setEnabled: 130000, healthCheck: 30000, toolsList: 30000, toolExplorer: 30000,
-  catalog: 30000, status: 30000, _default: 30000,
+  setEnabled: 130000, catalog: 20000, status: 20000, _default: 30000,
 };
 
 async function call(method, params = {}) {
@@ -54,28 +59,20 @@ const CATEGORY_GROUP = {
 };
 
 const state = {
-  view: 'connections',
-  items: [],          // status.detail.items
-  catalog: [],        // catalog.detail.items
-  tools: null,        // toolExplorer.detail
-  query: '',          // 顶栏搜索（连接/目录）
-  toolQuery: '',      // 工具搜索
-  toolServer: '',     // 工具按 serverName 筛选
-  toolStatus: '',     // 工具按连接状态筛选
-  group: 'all',       // 连接分组
-  page: 0,            // 当前页（0 基）
-  pageSize: 8,        // 连接/目录每页条数
-  toolPage: 0,
-  toolPageSize: 20,
+  catalog: [],        // catalog.detail.items（compact）
+  items: [],          // status.detail.items（已连接的实例）
+  query: '',
+  group: 'all',
+  page: 0,
+  pageSize: 12,
   loading: false,
   busy: false,
   workspaceId: '',
-  workspaces: [],
-  // 目录布局（列表 / 栅格）与「深度业务探针」开关都记在 localStorage，
-  // 刷新面板后保持用户选择；沙箱里 localStorage 不可用时静默回退默认值。
+  // 布局记在 localStorage，刷新面板后保持用户选择；沙箱里不可用时静默回退。
   layout: (() => { try { return localStorage.getItem('connector-hub:layout') === 'grid' ? 'grid' : 'list'; } catch { return 'list'; } })(),
-  loaded: false,      // 是否已拿到过首屏数据（用于只在第一次显示 loading）
-  refreshPending: false, // 加载中又收到刷新信号时，结束后补跑一次，避免丢掉更新
+  loaded: false,          // 是否已拿到过首屏数据（只在第一次显示 loading）
+  refreshPending: false,  // 加载中又收到刷新信号时，结束后补跑一次
+  drawerOpen: false,
 };
 
 /* 首屏快照缓存：面板是 iframe，反复开关很常见。有快照就先立刻渲染，
@@ -112,70 +109,64 @@ const LOCALE = (() => {
 })();
 const I18N = {
   'zh-CN': {
-    brand: '连接器', connections: '连接', catalog: '目录', tools: '工具', subtitle: '外部服务接入控制台', workspace: '工作台',
-    search: '搜索连接、服务或工具…', toolSearch: '搜索工具名或描述…', refresh: '刷新', check: '深度检查', add: '添加连接',
-    overview: '业务健康总览', overviewSub: '颜色表示业务通道的真实状态，握手成功不代表凭据有效',
-    verified: '业务已验证', unknown: '待确认', invalid: '凭据失效', idle: '未启用',
-    noConnections: '还没有连接', noConnectionsHint: '去「目录」挑一个连接器，或用「添加连接」粘贴 JSON / URL。',
-    noCatalog: '目录为空', noCatalogHint: '检查网络或点击刷新重新拉取目录。',
-    noTools: '暂无工具缓存', noToolsHint: '连接成功并完成一次工具发现后，这里会列出可用工具。',
+    brand: '连接器', subtitle: '外部服务接入', catalog: '目录',
+    search: '搜索连接器…', refresh: '刷新', add: '添加连接',
+    connected: '已连接', connectedTitle: '已连接的应用', close: '关闭',
+    connectedEmpty: '还没有连接任何应用', connectedEmptyHint: '在上方目录里挑一个，点「连接」即可。',
+    noCatalog: '目录为空', noCatalogHint: '检查网络，或点「刷新」重新拉取目录。',
     noMatch: '没有匹配的内容', noMatchHint: '换一个关键词，或清除筛选条件。',
-    repair: '修复凭据', repairTitle: '重新配置凭据', repairHint: '只替换 Token / API Key，URL、作用域、注入模式等其余配置保持不变。写入后会立即做一次业务级复验。',
+    repair: '修复凭据', repairTitle: '更新凭据',
+    repairHint: '只替换 Token / API Key，URL、作用域、注入模式等其余配置保持不变。',
     newToken: '新的 API Token', newKey: '新的 API Key', keyHeader: '头名（可选）',
-    save: '保存并复验', cancel: '取消', connect: '连接', disconnect: '断开',
-    enable: '启用', disable: '停用', detail: '详情', recheck: '重新检查',
-    checking: '检查中…', checkedOk: '深度检查完成', checkedFail: '深度检查未通过', repaired: '凭据已更新并通过复验',
+    save: '保存', cancel: '取消', connect: '连接', disconnect: '断开',
+    enable: '启用', disable: '停用', detail: '已连接',
+    repaired: '凭据已更新',
     authBearer: 'Bearer Token', authApiKey: 'API Key', authOAuth: 'OAuth', authNone: '无需凭据',
-    global: '全局', session: '按会话', scopeProject: '项目',
+    global: '全局', scopeProject: '项目',
     credentialExpiring: '凭据即将过期', credentialExpired: '凭据已过期',
-    businessVerified: '业务通道已验证', businessUnknown: '业务通道未确认',
+    businessUnknown: '待确认',
     businessInvalid: '凭据已失效：握手正常，但真实调用被拒绝',
     layoutList: '列表视图', layoutGrid: '栅格视图',
-    hintReauth: '建议点击「修复凭据」填入新 Token，或重新授权。',
+    hintReauth: '点「修复凭据」填入新 Token，或重新授权。',
     confirmDisconnect: '确定断开这条连接吗？',
     prev: '上一页', next: '下一页', pageInfo: '第 {from}–{to} 条，共 {total} 条',
-    allServers: '全部服务', allStatus: '全部状态', statusSuccess: '已连接', statusFailed: '异常', statusUnknown: '未知', statusPending: '待发现',
-    toolCount: '{count} 个工具', perPage: '每页',
     whereToGet: '去哪里获取凭据', openGuide: '打开申请页面',
     reuseCli: '复用本机已登录凭据', reuseCliHint: '检测到本机 {labels} 已登录，可直接复用其授权，无需手工创建 Token。',
-    cliChecking: '正在检测本机 CLI 登录状态…',
     oauthClientTitle: '此服务不支持自动注册客户端',
-    oauthClientHint: '该服务的 OAuth 未提供动态客户端注册（DCR）。请填写你在该服务登记的 OAuth App 的 client_id（如为机密客户端还需 client_secret），之后就能用浏览器正常登录。',
+    oauthClientHint: '该服务的 OAuth 未提供动态客户端注册（DCR）。请填写你在该服务登记的 OAuth App 的 client_id（机密客户端还需 client_secret），之后就能用浏览器正常登录。',
     oauthClientId: 'OAuth Client ID', oauthClientSecret: 'OAuth Client Secret（可选）',
     oauthFlow: '授权方式', flowAuto: '自动', flowCode: '浏览器授权码', flowDevice: '设备码（输入短码）',
+    statConnected: '在连', statProblem: '异常',
   },
   en: {
-    brand: 'Connector', connections: 'Connections', catalog: 'Catalog', tools: 'Tools', subtitle: 'External service access', workspace: 'Workspace',
-    search: 'Search connections, servers or tools…', toolSearch: 'Search tool names or descriptions…', refresh: 'Refresh', check: 'Deep check', add: 'Add connection',
-    overview: 'Business health', overviewSub: 'Colors show the real state of the business channel; a successful handshake does not prove valid credentials',
-    verified: 'Verified', unknown: 'Unconfirmed', invalid: 'Invalid credential', idle: 'Disabled',
-    noConnections: 'No connections yet', noConnectionsHint: 'Pick a connector from the Catalog, or use Add connection to paste JSON / a URL.',
-    noCatalog: 'Catalog is empty', noCatalogHint: 'Check the network or press Refresh to reload the catalog.',
-    noTools: 'No tool cache yet', noToolsHint: 'After a successful connection and tool discovery, available tools appear here.',
+    brand: 'Connector', subtitle: 'External service access', catalog: 'Catalog',
+    search: 'Search connectors…', refresh: 'Refresh', add: 'Add connection',
+    connected: 'Connected', connectedTitle: 'Connected apps', close: 'Close',
+    connectedEmpty: 'Nothing connected yet', connectedEmptyHint: 'Pick one from the catalog above and hit Connect.',
+    noCatalog: 'Catalog is empty', noCatalogHint: 'Check the network, or press Refresh to reload.',
     noMatch: 'Nothing matches', noMatchHint: 'Try another keyword, or clear the filters.',
-    repair: 'Fix credentials', repairTitle: 'Update credentials', repairHint: 'Only the token / API key is replaced; URL, scope and injection mode stay unchanged. A business-level re-check runs immediately after saving.',
+    repair: 'Fix credentials', repairTitle: 'Update credentials',
+    repairHint: 'Only the token / API key is replaced; URL, scope and injection mode stay unchanged.',
     newToken: 'New API token', newKey: 'New API key', keyHeader: 'Header name (optional)',
-    save: 'Save & verify', cancel: 'Cancel', connect: 'Connect', disconnect: 'Disconnect',
-    enable: 'Enable', disable: 'Disable', detail: 'Details', recheck: 'Recheck',
-    checking: 'Checking…', checkedOk: 'Deep check complete', checkedFail: 'Deep check failed', repaired: 'Credentials updated and verified',
+    save: 'Save', cancel: 'Cancel', connect: 'Connect', disconnect: 'Disconnect',
+    enable: 'Enable', disable: 'Disable', detail: 'Connected',
+    repaired: 'Credentials updated',
     authBearer: 'Bearer Token', authApiKey: 'API Key', authOAuth: 'OAuth', authNone: 'No credential',
-    global: 'Global', session: 'Per session', scopeProject: 'Project',
+    global: 'Global', scopeProject: 'Project',
     credentialExpiring: 'Credential expiring soon', credentialExpired: 'Credential expired',
-    businessVerified: 'Business channel verified', businessUnknown: 'Business channel unconfirmed',
+    businessUnknown: 'Unconfirmed',
     businessInvalid: 'Credential invalid: handshake succeeded but real calls are rejected',
     layoutList: 'List view', layoutGrid: 'Grid view',
     hintReauth: 'Click Fix credentials to enter a new token, or reauthorize.',
     confirmDisconnect: 'Disconnect this connection?',
     prev: 'Previous', next: 'Next', pageInfo: '{from}–{to} of {total}',
-    allServers: 'All servers', allStatus: 'All states', statusSuccess: 'Connected', statusFailed: 'Failed', statusUnknown: 'Unknown', statusPending: 'Pending',
-    toolCount: '{count} tools', perPage: 'Per page',
     whereToGet: 'Where to get credentials', openGuide: 'Open signup page',
     reuseCli: 'Reuse local CLI login', reuseCliHint: 'Detected a logged-in {labels} on this machine; its authorization can be reused instead of creating a token manually.',
-    cliChecking: 'Checking local CLI login state…',
     oauthClientTitle: 'This service does not support automatic client registration',
     oauthClientHint: 'This OAuth server does not offer Dynamic Client Registration (DCR). Enter the client_id of the OAuth App you registered with the service (plus client_secret for confidential clients) and browser sign-in will work.',
     oauthClientId: 'OAuth Client ID', oauthClientSecret: 'OAuth Client Secret (optional)',
     oauthFlow: 'Authorization flow', flowAuto: 'Auto', flowCode: 'Browser authorization code', flowDevice: 'Device code (enter a short code)',
+    statConnected: 'Active', statProblem: 'Issues',
   },
 };
 const t = (key, params) => {
@@ -189,6 +180,7 @@ function toast(message, kind = '') {
   const node = el('toast');
   node.textContent = message;
   node.hidden = false;
+  node.dataset.kind = kind;
   clearTimeout(node._timer);
   node._timer = setTimeout(() => { node.hidden = true; }, 4200);
 }
@@ -196,8 +188,7 @@ function toast(message, kind = '') {
 /* ── 数据加载 ───────────────────────────────────────── */
 /**
  * 只取「状态 + 目录」，永远不碰 healthCheck。
- * healthCheck 即使轻量也要握手甚至跑探针（实测 8s+），把它放进首屏路径就是这个面板卡顿的根因；
- * 它只由用户主动点「深度检查 / 重新检查」时通过 runHealthCheck 触发。
+ * healthCheck 即使轻量也要握手甚至跑探针（实测 8s+），把它放进首屏路径就是这个面板卡顿的根因。
  * 目录走 compact 模式（后端砍掉 prompts/servers 等大字段，313KB → ~18KB）。
  */
 async function loadAll() {
@@ -215,56 +206,12 @@ async function loadAll() {
     if (catalogRes.ok) state.catalog = catalogRes.detail?.items ?? [];
     state.loaded = true;
     writeSnapshot();
-    if (state.view === 'tools') await loadTools();
     render();
   } finally {
     state.busy = false;
     setLoading(false);
     if (state.refreshPending) { state.refreshPending = false; loadAll(); }
   }
-}
-
-/**
- * 主动健康检查（唯一会调 healthCheck 的入口）。
- * 不阻塞画面：先刷新状态，检查结果回来再刷新一次列表。
- */
-async function runHealthCheck({ connectorId = '', deep = true, silent = false } = {}) {
-  // 深度检查要握手甚至跑业务探针（实测 8s+），先给个忙碌反馈，别让按钮看起来没响应。
-  const btn = document.getElementById('btn-check');
-  const prevLabel = btn ? btn.textContent : '';
-  if (btn && deep) { btn.disabled = true; btn.textContent = t('checking'); }
-  const payload = {
-    ...(connectorId ? { connectorId } : {}),
-    deep,
-    force: true,
-    // 不传 workspaceId / connectionKey：否则后端走 scoped 分支、不写健康缓存。
-  };
-  let res;
-  try {
-    res = await call('healthCheck', payload);
-    if (!silent) toast(res.ok ? t('checkedOk') : (res.message || t('checkedFail')), res.ok ? '' : 'bad');
-    render();
-    const workspaceParams = state.workspaceId ? { workspaceId: state.workspaceId } : {};
-    const again = await call('status', workspaceParams);
-    if (again.ok) { state.items = again.detail?.items ?? []; render(); }
-  } finally {
-    if (btn && deep) { btn.disabled = false; btn.textContent = prevLabel || t('check'); }
-  }
-  return res;
-}
-
-async function loadTools() {
-  const params = {
-    ...(state.workspaceId ? { workspaceId: state.workspaceId } : {}),
-    query: state.toolQuery || undefined,
-    serverName: state.toolServer || undefined,
-    status: state.toolStatus || undefined,
-    offset: state.toolPage * state.toolPageSize,
-    limit: state.toolPageSize,
-  };
-  const res = await call('toolExplorer', params);
-  state.tools = res.ok ? res.detail : { total: 0, items: [], connections: [] };
-  if (state.view === 'tools') syncToolFilters();
 }
 
 function setLoading(on) {
@@ -283,7 +230,7 @@ function readinessOf(item) {
 }
 function stateLabelFor(r) {
   const cls = r === 'verified' ? 'ok' : r === 'credential-invalid' ? 'bad' : r === 'idle' ? 'idle' : 'warn';
-  return { cls, text: t(r === 'verified' ? 'verified' : r === 'credential-invalid' ? 'invalid' : r === 'idle' ? 'idle' : 'unknown') };
+  return { cls, text: t(r === 'verified' ? 'detail' : r === 'credential-invalid' ? 'invalid' : r === 'idle' ? 'idle' : 'businessUnknown') };
 }
 function authLabel(item) {
   const map = { bearer: t('authBearer'), 'api-key': t('authApiKey'), oauth: t('authOAuth'), none: t('authNone') };
@@ -299,82 +246,47 @@ function groupOf(item) {
   return 'other';
 }
 
+/** 某条连接实例对应的目录项 category（用于分组） */
+function catalogCategoryOf(id) { return state.catalog.find((c) => c.id === id)?.category ?? ''; }
+
 /* ── 渲染总入口 ─────────────────────────────────────── */
 function render() {
-  renderNav();
-  renderOverview();
-  el('overview').hidden = state.view !== 'connections';
-  el('groupbar').hidden = state.view === 'tools';
-  el('toolbar').hidden = state.view !== 'tools';
-  el('view-title').textContent = t(state.view === 'connections' ? 'connections' : state.view === 'catalog' ? 'catalog' : 'tools');
-  // 布局切换只在目录视图出现，并同步按钮选中态。
+  const connectedCount = state.items.filter((i) => i.enabled !== false).length;
+  el('connected-count').textContent = connectedCount || '';
+  el('list-count').textContent = state.catalog.length || '';
   const layoutSwitch = el('layout-switch');
   if (layoutSwitch) {
-    layoutSwitch.hidden = state.view !== 'catalog';
     layoutSwitch.querySelectorAll('[data-layout]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.layout === state.layout)));
   }
-  const q = state.query.trim().toLowerCase();
-  if (state.view === 'connections') { renderGroupBar(); renderConnections(q); }
-  else if (state.view === 'catalog') { renderGroupBar(); renderCatalog(q); }
-  else renderToolView();
+  renderGroupBar();
+  renderCatalog(state.query.trim().toLowerCase());
+  if (state.drawerOpen) renderDrawer();
 }
 
-function renderNav() {
-  for (const btn of document.querySelectorAll('.nav button')) {
-    btn.setAttribute('aria-current', btn.dataset.view === state.view ? 'page' : 'false');
-  }
-  el('nav-connections-count').textContent = state.items.filter((i) => i.enabled !== false).length || '';
-  el('nav-catalog-count').textContent = state.catalog.length || '';
-  el('nav-tools-count').textContent = state.tools?.total ?? '';
-}
-
-function renderOverview() {
-  const buckets = { verified: 0, unknown: 0, 'credential-invalid': 0, idle: 0 };
-  for (const item of state.items) { const r = readinessOf(item); buckets[r] = (buckets[r] ?? 0) + 1; }
-  const total = state.items.length || 1;
-  el('stat-ok').textContent = buckets.verified;
-  el('stat-warn').textContent = buckets.unknown;
-  el('stat-bad').textContent = buckets['credential-invalid'];
-  const pct = (n) => `${(n / total) * 100}%`;
-  el('signalbar').innerHTML =
-    `<i class="s-ok" style="width:${pct(buckets.verified)}"></i>` +
-    `<i class="s-warn" style="width:${pct(buckets.unknown)}"></i>` +
-    `<i class="s-bad" style="width:${pct(buckets['credential-invalid'])}"></i>` +
-    `<i class="s-idle" style="width:${pct(buckets.idle)}"></i>`;
-}
-
-/** 分组条：按当前视图的数据统计每个分组的数量，只显示非空组。 */
+/** 分组条：按当前数据统计每个分组的数量，只显示非空组。 */
 function renderGroupBar() {
   const q = state.query.trim().toLowerCase();
   const counts = new Map();
-  if (state.view === 'connections') {
-    for (const item of state.items) {
-      if (q && ![item.name, item.serverName, item.connectorId, item.endpoint].some((v) => String(v ?? '').toLowerCase().includes(q))) continue;
-      const g = groupOf(item);
-      counts.set(g, (counts.get(g) ?? 0) + 1);
-      counts.set('all', (counts.get('all') ?? 0) + 1);
-    }
-  } else {
-    for (const c of state.catalog) {
-      if (q && ![c.name, c.id, c.vendor, c.summary, c.category].some((v) => String(v ?? '').toLowerCase().includes(q))) continue;
-      const g = CATEGORY_GROUP[c.category] ?? 'other';
-      counts.set(g, (counts.get(g) ?? 0) + 1);
-      counts.set('all', (counts.get('all') ?? 0) + 1);
-    }
+  for (const c of state.catalog) {
+    if (q && ![c.name, c.id, c.vendor, c.summary, c.category].some((v) => String(v ?? '').toLowerCase().includes(q))) continue;
+    const g = CATEGORY_GROUP[c.category] ?? 'other';
+    counts.set(g, (counts.get(g) ?? 0) + 1);
+    counts.set('all', (counts.get('all') ?? 0) + 1);
   }
   const keys = GROUP_KEYS.filter((k) => k === 'all' || counts.has(k));
   // 当前选中组没有数据时回落到全部
   if (!keys.includes(state.group)) state.group = 'all';
-  el('groupbar').innerHTML = keys.map((k) =>
-    `<button type="button" data-group="${k}" aria-pressed="${state.group === k}">${groupLabel(k)}<span class="n">${counts.get(k) ?? 0}</span></button>`
-  ).join('');
+  el('groupbar').innerHTML = counts.size
+    ? keys.map((k) => `<button type="button" data-group="${k}" aria-pressed="${state.group === k}">${groupLabel(k)}<span class="n">${counts.get(k) ?? 0}</span></button>`).join('')
+    : '';
+  el('groupbar').hidden = !counts.size;
 }
 
 /** 通用分页渲染。 */
 function renderPager(total, page, pageSize, onPage) {
   const pager = el('pager');
   const pages = Math.max(1, Math.ceil(total / pageSize));
-  if (total <= pageSize) { pager.hidden = true; pager.innerHTML = ''; return; }
+  if (total <= pageSize) { pager.hidden = true; pager.innerHTML = ''; pager._onPage = null; return; }
   const from = page * pageSize + 1;
   const to = Math.min(total, (page + 1) * pageSize);
   pager.hidden = false;
@@ -398,67 +310,6 @@ function emptyHtml(titleKey, hintKey) {
   return `<div class="empty"><strong>${t(titleKey)}</strong>${t(hintKey)}</div>`;
 }
 
-/* ── 连接列表：分组 + 分页 ───────────────────────────── */
-function renderConnections(q) {
-  let list = state.items.filter((item) => !q || [item.name, item.serverName, item.connectorId, item.endpoint].some((v) => String(v ?? '').toLowerCase().includes(q)));
-  if (state.group !== 'all') list = list.filter((item) => groupOf(item) === state.group);
-
-  const slice = pageSlice(list, state.page, state.pageSize);
-  state.page = slice.p;
-  el('list-title').textContent = state.group === 'all' ? t('connections') : groupLabel(state.group);
-  el('list-count').textContent = list.length || '';
-  if (!list.length) {
-    el('rows').innerHTML = emptyHtml(q || state.group !== 'all' ? 'noMatch' : 'noConnections', q || state.group !== 'all' ? 'noMatchHint' : 'noConnectionsHint');
-    renderPager(0, 0, state.pageSize, (p) => { state.page = p; renderConnections(state.query.trim().toLowerCase()); });
-    return;
-  }
-  el('rows').innerHTML = `<div class="rows">${slice.items.map(rowHtml).join('')}</div>`;
-  renderPager(list.length, slice.p, state.pageSize, (p) => { state.page = p; renderConnections(state.query.trim().toLowerCase()); });
-}
-
-function rowHtml(item) {
-  const r = readinessOf(item);
-  const st = stateLabelFor(r);
-  const diag = item.diagnostic;
-  const expiring = item.credential?.expiringSoon && !item.credential?.expired;
-  const expired = item.credential?.expired;
-  let note = '';
-  let noteClass = '';
-  if (r === 'credential-invalid') { note = `${t('businessInvalid')} — ${t('hintReauth')}`; noteClass = 'bad'; }
-  else if (expired) { note = t('credentialExpired'); noteClass = 'bad'; }
-  else if (expiring) { note = t('credentialExpiring'); noteClass = 'warn'; }
-  /* 已验证是默认状态：状态药丸已经说了，不再重复一行备注。 */
-  else if (r === 'unknown') { note = diag?.message ? esc(diag.message) : t('businessUnknown'); noteClass = 'warn'; }
-  else if (diag?.message) { note = esc(diag.message); }
-
-  const canRepair = item.authMode === 'bearer' || item.authMode === 'api-key';
-  const actions = [];
-  if (r === 'credential-invalid' && canRepair) actions.push(`<button class="tbtn fix" data-act="repair" data-key="${esc(item.key)}" data-mode="${esc(item.authMode)}">${t('repair')}</button>`);
-  actions.push(`<button class="tbtn" data-act="recheck" data-key="${esc(item.key)}">${t('recheck')}</button>`);
-  actions.push(`<button class="tbtn" data-act="${item.enabled === false ? 'enable' : 'disable'}" data-key="${esc(item.key)}">${item.enabled === false ? t('enable') : t('disable')}</button>`);
-  actions.push(`<button class="tbtn danger" data-act="disconnect" data-key="${esc(item.key)}">${t('disconnect')}</button>`);
-
-  return `<article class="row" data-readiness="${r}" data-state="${esc(item.connectionState)}">
-    <span class="status-dot" aria-hidden="true"></span>
-    <div>
-      <div class="row-title">
-        <strong>${esc(item.name)}</strong>
-        <span class="chip">${esc(item.serverName)}</span>
-        <span class="state-label ${st.cls}">${st.text}</span>
-        ${expired || expiring ? `<span class="state-label ${expired ? 'bad' : 'warn'}">${expired ? t('credentialExpired') : t('credentialExpiring')}</span>` : ''}
-      </div>
-      <div class="row-meta">
-        <span>${esc(authLabel(item))}</span>
-        ${item.transport ? `<span>${esc(item.transport)}</span>` : ''}
-        <span>${scopeLabel(item)}</span>
-        <span class="endpoint" title="${esc(item.endpoint)}">${esc(item.endpoint)}</span>
-      </div>
-      ${note ? `<div class="row-note ${noteClass}">${note}</div>` : ''}
-    </div>
-    <div class="row-actions">${actions.join('')}</div>
-  </article>`;
-}
-
 /* ── 目录：分组 + 分页 ───────────────────────────────── */
 function renderCatalog(q) {
   let list = state.catalog.filter((c) => !q || [c.name, c.id, c.vendor, c.summary, c.category].some((v) => String(v ?? '').toLowerCase().includes(q)));
@@ -470,7 +321,7 @@ function renderCatalog(q) {
   el('list-count').textContent = list.length || '';
   if (!list.length) {
     el('rows').innerHTML = emptyHtml(q || state.group !== 'all' ? 'noMatch' : 'noCatalog', q || state.group !== 'all' ? 'noMatchHint' : 'noCatalogHint');
-    renderPager(0, 0, state.pageSize, (p) => { state.page = p; renderCatalog(state.query.trim().toLowerCase()); });
+    renderPager(0, 0, state.pageSize, () => {});
     return;
   }
   const gridClass = state.layout === 'grid' ? 'grid grid-cards' : 'grid grid-list';
@@ -485,10 +336,10 @@ function cardHtml(c, layout = 'list') {
   const icon = window.ConnectorIcons?.iconHtml
     ? window.ConnectorIcons.iconHtml(c, layout === 'grid' ? 20 : 18)
     : `<span class="ci-emoji">${esc(String(c.name || c.id || '?').trim().charAt(0).toUpperCase())}</span>`;
-  const meta = `<span>${esc(c.category || '')}</span><span>${esc(authLabel({ authMode: c.authMode }))}</span>${connected ? `<span style="color:var(--ok)">●</span>` : ''}`;
+  const meta = `<span>${esc(c.category || '')}</span><span>${esc(authLabel({ authMode: c.authMode }))}</span>`;
   const foot = `<div class="tile-foot"><button class="tbtn ${connected ? '' : 'strong'}" data-act="connect" data-id="${esc(c.id)}">${connected ? t('detail') : t('connect')}</button></div>`;
   if (layout === 'grid') {
-    return `<article class="tile">
+    return `<article class="tile"${connected ? ' data-connected="1"' : ''}>
       <div class="tile-icon">${icon}</div>
       <div>
         <div class="tile-name">${esc(c.name)} <span class="chip">${esc(c.id)}</span></div>
@@ -500,10 +351,10 @@ function cardHtml(c, layout = 'list') {
     </article>`;
   }
   // 列表视图精简列：图标 + 名称/ID + 一行简介 + 分类·鉴权 + 操作，去掉厂商独立行。
-  return `<article class="tile">
+  return `<article class="tile"${connected ? ' data-connected="1"' : ''}>
     <div class="tile-icon">${icon}</div>
     <div>
-      <div class="tile-name">${esc(c.name)} <span class="chip">${esc(c.id)}</span></div>
+      <div class="tile-name">${esc(c.name)} <span class="chip">${esc(c.id)}</span>${connected ? '<span class="dot-ok" aria-hidden="true"></span>' : ''}</div>
       <div class="tile-desc tile-desc-clamp">${esc(c.summary || '')}</div>
       <div class="tile-tags">${meta}</div>
     </div>
@@ -511,72 +362,82 @@ function cardHtml(c, layout = 'list') {
   </article>`;
 }
 
-/* ── 工具：服务端搜索 + 筛选 + 分页 ──────────────────── */
-function syncToolFilters() {
-  const servers = [...new Set((state.tools?.connections ?? []).map((c) => c.serverName).filter(Boolean))].sort();
-  const serverSel = el('tool-server-filter');
-  const statusSel = el('tool-status-filter');
-  const signature = servers.join('\u0000');
-  // 只在服务列表变化时重建，避免筛选过程中把用户刚选中的值冲掉。
-  if (serverSel._signature !== signature) {
-    serverSel.innerHTML = `<option value="">${t('allServers')}</option>` + servers.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
-    serverSel._signature = signature;
-  }
-  if (!statusSel.options.length) {
-    statusSel.innerHTML = `<option value="">${t('allStatus')}</option>`
-      + `<option value="success">${t('statusSuccess')}</option>`
-      + `<option value="failed">${t('statusFailed')}</option>`
-      + `<option value="unknown">${t('statusUnknown')}</option>`
-      + `<option value="pending">${t('statusPending')}</option>`;
-  }
-  serverSel.value = state.toolServer;
-  statusSel.value = state.toolStatus;
-  el('tool-search').value = state.toolQuery;
-  el('tool-search').placeholder = t('toolSearch');
-  const total = state.tools?.total ?? 0;
-  el('tool-hint').textContent = t('toolCount', { count: total });
+/* ── 已连接抽屉 ─────────────────────────────────────── */
+function openDrawer() {
+  state.drawerOpen = true;
+  el('scrim').hidden = false;
+  el('drawer').hidden = false;
+  el('btn-connected').setAttribute('aria-expanded', 'true');
+  renderDrawer();
+  document.body.classList.add('drawer-open');
+  setTimeout(() => el('drawer-close')?.focus(), 0);
+}
+function closeDrawer() {
+  state.drawerOpen = false;
+  el('scrim').hidden = true;
+  el('drawer').hidden = true;
+  el('btn-connected').setAttribute('aria-expanded', 'false');
+  document.body.classList.remove('drawer-open');
 }
 
-function renderToolView() {
-  const detail = state.tools;
-  const items = detail?.items ?? [];
-  el('list-title').textContent = t('tools');
-  el('list-count').textContent = detail?.total ?? '';
-  if (!items.length) {
-    el('rows').innerHTML = emptyHtml(state.toolQuery || state.toolServer || state.toolStatus ? 'noMatch' : 'noTools',
-      state.toolQuery || state.toolServer || state.toolStatus ? 'noMatchHint' : 'noToolsHint');
-    renderPager(0, 0, state.toolPageSize, () => {});
+function renderDrawer() {
+  const list = state.items;
+  const active = list.filter((i) => i.enabled !== false).length;
+  const problem = list.filter((i) => readinessOf(i) === 'credential-invalid').length;
+  el('drawer-stats').innerHTML = list.length
+    ? `<span class="stat ok"><b>${active}</b><span>${t('statConnected')}</span></span>` +
+      `<span class="stat${problem ? ' bad' : ''}"><b>${problem}</b><span>${t('statProblem')}</span></span>`
+    : '';
+  if (!list.length) {
+    el('drawer-rows').innerHTML = emptyHtml('connectedEmpty', 'connectedEmptyHint');
     return;
   }
-  const groups = new Map();
-  for (const tool of items) {
-    const key = tool.serverName || tool.connectionKey || 'server';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(tool);
-  }
-  el('rows').innerHTML = [...groups.entries()].map(([server, tools]) => `
-    <section class="tool-server">
-      <h4>${esc(server)} <span class="n">${tools.length}</span></h4>
-      <div>${tools.map((tool) => `
-        <div class="tool-row"><span class="name" title="${esc(tool.name)}">${esc(tool.name)}</span>${(() => {
-          // 远端常把 title/description 填成与名称相同的值，重复显示只是噪音。
-          const desc = String(tool.title || tool.description || '').trim();
-          return desc && desc !== tool.name ? `<span class="desc">${esc(desc)}</span>` : '';
-        })()}</div>
-      `).join('')}</div>
-    </section>`).join('');
-  renderPager(detail?.total ?? 0, state.toolPage, state.toolPageSize, (p) => { state.toolPage = p; loadTools().then(renderToolView); });
+  el('drawer-rows').innerHTML = `<div class="rows">${list.map(rowHtml).join('')}</div>`;
+}
+
+function rowHtml(item) {
+  const r = readinessOf(item);
+  const st = stateLabelFor(r);
+  const expiring = item.credential?.expiringSoon && !item.credential?.expired;
+  const expired = item.credential?.expired;
+  let note = '';
+  let noteClass = '';
+  if (r === 'credential-invalid') { note = `${t('businessInvalid')} — ${t('hintReauth')}`; noteClass = 'bad'; }
+  else if (expired) { note = t('credentialExpired'); noteClass = 'bad'; }
+  else if (expiring) { note = t('credentialExpiring'); noteClass = 'warn'; }
+  /* 已验证是默认状态：状态药丸已经说了，不再重复一行备注。 */
+  else if (item.diagnostic?.message) { note = esc(item.diagnostic.message); }
+  else if (r === 'unknown') { note = t('businessUnknown'); noteClass = 'warn'; }
+
+  const canRepair = item.authMode === 'bearer' || item.authMode === 'api-key';
+  const actions = [];
+  if (r === 'credential-invalid' && canRepair) actions.push(`<button class="tbtn fix" data-act="repair" data-key="${esc(item.key)}" data-mode="${esc(item.authMode)}">${t('repair')}</button>`);
+  actions.push(`<button class="tbtn" data-act="${item.enabled === false ? 'enable' : 'disable'}" data-key="${esc(item.key)}">${item.enabled === false ? t('enable') : t('disable')}</button>`);
+  actions.push(`<button class="tbtn danger" data-act="disconnect" data-key="${esc(item.key)}">${t('disconnect')}</button>`);
+
+  return `<article class="row" data-readiness="${r}">
+    <div>
+      <div class="row-title">
+        <strong>${esc(item.name)}</strong>
+        <span class="chip">${esc(item.serverName)}</span>
+        <span class="state-label ${st.cls}">${st.text}</span>
+        ${expired || expiring ? `<span class="state-label ${expired ? 'bad' : 'warn'}">${expired ? t('credentialExpired') : t('credentialExpiring')}</span>` : ''}
+      </div>
+      <div class="row-meta">
+        <span>${esc(authLabel(item))}</span>
+        ${item.transport ? `<span>${esc(item.transport)}</span>` : ''}
+        <span>${scopeLabel(item)}</span>
+      </div>
+      ${note ? `<div class="row-note ${noteClass}">${note}</div>` : ''}
+    </div>
+    <div class="row-actions">${actions.join('')}</div>
+  </article>`;
 }
 
 /* ── 交互 ───────────────────────────────────────────── */
 async function onAction(act, target) {
   const key = target.dataset.key;
   if (act === 'repair') return openRepair(key, target.dataset.mode);
-  if (act === 'recheck') {
-    // 只定向检查这一条连接所属的 connector，且等结果出来再提示（不再先弹成功）。
-    const item = state.items.find((it) => it.key === key);
-    return runHealthCheck({ deep: false, connectorId: item?.connectorId ?? '' });
-  }
   if (act === 'enable' || act === 'disable') {
     const res = await call('setEnabled', { key, enabled: act === 'enable' });
     toast(res.message);
@@ -602,11 +463,6 @@ async function onAction(act, target) {
       const detail = { ...(res.detail || {}), connectorId: res.detail?.connectorId || target.dataset.id };
       return openRepair('', res.detail?.authMode || 'bearer', detail);
     }
-  }
-  if (act === 'reuse-cli') {
-    const res = await call('reuseCliAuth', { connectorId: target.dataset.id });
-    toast(res.message);
-    return loadAll();
   }
 }
 
@@ -799,17 +655,8 @@ function applyHostFonts(fonts) {
   setSize('--dsh-terminal-font-size', fonts.terminalSize);
 }
 
-
 /* ── 事件绑定 ───────────────────────────────────────── */
 function bind() {
-  document.querySelectorAll('.nav button').forEach((btn) => btn.addEventListener('click', async () => {
-    state.view = btn.dataset.view;
-    state.page = 0;
-    state.toolPage = 0;
-    if (state.view === 'tools') await loadTools();
-    render();
-  }));
-
   // 目录里的远程图标可能 404（含历史遗留路径、外部站点失效）：加载失败时换成内联默认图标，
   // 用捕获阶段监听（img 的 error 不冒泡），比每个 <img> 挂 onerror 更干净。
   document.addEventListener('error', (e) => {
@@ -825,8 +672,13 @@ function bind() {
 
   el('search').addEventListener('input', (e) => { state.query = e.target.value; state.page = 0; render(); });
   el('btn-refresh').addEventListener('click', () => loadAll());
-  el('btn-check').addEventListener('click', () => runHealthCheck({ deep: true }));
   el('btn-add').addEventListener('click', openAdd);
+
+  // 已连接抽屉
+  el('btn-connected').addEventListener('click', () => (state.drawerOpen ? closeDrawer() : openDrawer()));
+  el('drawer-close').addEventListener('click', closeDrawer);
+  el('scrim').addEventListener('click', closeDrawer);
+
   // 目录布局切换：列表 / 栅格，选择记在 localStorage。
   el('layout-switch').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-layout]');
@@ -845,38 +697,25 @@ function bind() {
     render();
   });
 
-  // 分页
+  // 分页：纯本地切片，不发请求。
   el('pager').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-page]');
     if (!btn || btn.disabled || !el('pager')._onPage) return;
     const delta = btn.dataset.page === 'prev' ? -1 : 1;
-    const cur = state.view === 'tools' ? state.toolPage : state.page;
-    el('pager')._onPage(Math.max(0, cur + delta));
+    el('pager')._onPage(Math.max(0, state.page + delta));
+    el('content').scrollTop = 0;
   });
 
-  // 工具筛选：输入防抖后走服务端查询
-  let toolTimer;
-  el('tool-search').addEventListener('input', (e) => {
-    state.toolQuery = e.target.value;
-    state.toolPage = 0;
-    clearTimeout(toolTimer);
-    toolTimer = setTimeout(() => loadTools().then(render), 250);
-  });
-  el('tool-server-filter').addEventListener('change', (e) => {
-    state.toolServer = e.target.value;
-    state.toolPage = 0;
-    loadTools().then(render);
-  });
-  el('tool-status-filter').addEventListener('change', (e) => {
-    state.toolStatus = e.target.value;
-    state.toolPage = 0;
-    loadTools().then(render);
-  });
-
+  // 目录卡片 / 抽屉里的动作
   el('content').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-act]');
     if (btn) onAction(btn.dataset.act, btn);
   });
+  el('drawer').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-act]');
+    if (btn) onAction(btn.dataset.act, btn);
+  });
+
   el('mask').addEventListener('click', (e) => {
     if (e.target === el('mask')) return closeDialog();
     const act = e.target.closest('[data-dlg]')?.dataset.dlg;
@@ -896,14 +735,17 @@ function bind() {
     }
     else if (act === 'add-save') submitAdd();
   });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !el('mask').hidden) closeDialog(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!el('mask').hidden) return closeDialog();
+    if (state.drawerOpen) closeDrawer();
+  });
 
   window.addEventListener('message', (event) => {
     if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
     if (event.data.type === 'connector-hub:workspace-context') {
       const ws = event.data.workspace;
       state.workspaceId = ws?.workspaceId ? String(ws.workspaceId) : '';
-      state.workspaces = Array.isArray(event.data.workspaces) ? event.data.workspaces : [];
       loadAll();
       return;
     }
@@ -919,11 +761,10 @@ function bind() {
   let refreshTimer;
   const scheduleRefresh = (event) => {
     if (document.hidden) return;
-    // 目录/工具类事件与当前视图无关时不刷新，避免无谓的重取（目录包 18KB）。
+    // 连接/目录类事件之外（心跳等）不必重取；两种情况都只是重取 18KB 目录 + 状态。
     let type = '';
     try { type = JSON.parse(event?.data ?? '{}')?.type ?? ''; } catch { /* 心跳等非 JSON 忽略 */ }
-    if (type === 'catalog' && state.view !== 'catalog') return;
-    if (type === 'tools' && state.view !== 'tools') return;
+    if (type && type !== 'catalog' && type !== 'connection' && type !== 'status') return;
     clearTimeout(refreshTimer);
     // SSE 刷新只重取状态/目录，绝不调 healthCheck（后者会再发 status 事件 → 自激循环）。
     refreshTimer = setTimeout(() => loadAll(), 150);
@@ -938,25 +779,15 @@ function bind() {
 
 function applyStaticText() {
   document.title = `${t('brand')} · ${t('subtitle')}`;
-  el('brand-name').textContent = t('brand');
-  el('brand-sub').textContent = t('subtitle');
-  el('nav-connections-label').textContent = t('connections');
-  el('nav-catalog-label').textContent = t('catalog');
-  el('nav-tools-label').textContent = t('tools');
+  el('view-title').textContent = t('brand');
+  el('section-label').textContent = t('subtitle');
   el('search').placeholder = t('search');
   el('btn-refresh').textContent = t('refresh');
-  el('btn-check').textContent = t('check');
   el('btn-add').textContent = t('add');
-  el('overview-title').textContent = t('overview');
-  el('overview-sub').textContent = t('overviewSub');
-  el('nav-label').textContent = t('workspace');
-  el('legend-ok').textContent = t('verified');
-  el('legend-warn').textContent = t('unknown');
-  el('legend-bad').textContent = t('invalid');
-  el('legend-idle').textContent = t('idle');
-  el('stat-ok-label').textContent = t('verified');
-  el('stat-warn-label').textContent = t('unknown');
-  el('stat-bad-label').textContent = t('invalid');
+  el('connected-label').textContent = t('connected');
+  el('drawer-title').textContent = t('connectedTitle');
+  el('drawer-close').textContent = t('close');
+  el('list-title').textContent = t('catalog');
   const layoutSwitch = el('layout-switch');
   if (layoutSwitch) {
     const lb = layoutSwitch.querySelector('[data-layout="list"]');
@@ -964,7 +795,6 @@ function applyStaticText() {
     if (lb) { lb.title = t('layoutList'); lb.setAttribute('aria-label', t('layoutList')); }
     if (gb) { gb.title = t('layoutGrid'); gb.setAttribute('aria-label', t('layoutGrid')); }
   }
-  el('tool-search').placeholder = t('toolSearch');
 }
 
 // 先应用 Host 注入的字体（服务端已读好宿主配置），保证首帧就是正确字体；
