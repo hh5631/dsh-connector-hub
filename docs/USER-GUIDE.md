@@ -404,7 +404,7 @@ Windows 下 `.cmd` / `.bat` 是脚本包装器，不等同于可直接启动的 
 | `dns` / `tls` / `timeout` / `http` | DNS、代理、VPN/专线、证书、IP 白名单、URL 和服务状态 |
 | `protocol` | URL 是否为兼容的 MCP Streamable HTTP 端点 |
 | `process-not-found` / `process-exit` / `startup` | 本地运行时、command/args/env/cwd、退出码和 Host 日志 |
-| `host-tools-pending` / `host-status-unavailable` | Host 是否完成工具注册、Host 版本是否支持状态读取 |
+| `host-tools-pending` / `host-status-unavailable` | Host 是否完成工具注册、Host 版本是否支持状态读取。插件按 Host 条目实际带 `hub-` 前缀的公开工具名（`mcp__hub-<serverName>__*`）核对注册结果，若这里长期报「尚未注册」，请先确认 Host 日志里该条目为 active |
 
 ### 如何反馈问题
 
