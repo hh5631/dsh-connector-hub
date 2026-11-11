@@ -124,7 +124,7 @@ const I18N = {
     newToken: '新的 API Token', newKey: '新的 API Key', keyHeader: '头名（可选）',
     save: '保存并复验', cancel: '取消', connect: '连接', disconnect: '断开',
     enable: '启用', disable: '停用', detail: '详情', recheck: '重新检查',
-    checkedOk: '深度检查完成', checkedFail: '深度检查未通过', repaired: '凭据已更新并通过复验',
+    checking: '检查中…', checkedOk: '深度检查完成', checkedFail: '深度检查未通过', repaired: '凭据已更新并通过复验',
     authBearer: 'Bearer Token', authApiKey: 'API Key', authOAuth: 'OAuth', authNone: '无需凭据',
     global: '全局', session: '按会话', scopeProject: '项目',
     credentialExpiring: '凭据即将过期', credentialExpired: '凭据已过期',
@@ -157,7 +157,7 @@ const I18N = {
     newToken: 'New API token', newKey: 'New API key', keyHeader: 'Header name (optional)',
     save: 'Save & verify', cancel: 'Cancel', connect: 'Connect', disconnect: 'Disconnect',
     enable: 'Enable', disable: 'Disable', detail: 'Details', recheck: 'Recheck',
-    checkedOk: 'Deep check complete', checkedFail: 'Deep check failed', repaired: 'Credentials updated and verified',
+    checking: 'Checking…', checkedOk: 'Deep check complete', checkedFail: 'Deep check failed', repaired: 'Credentials updated and verified',
     authBearer: 'Bearer Token', authApiKey: 'API Key', authOAuth: 'OAuth', authNone: 'No credential',
     global: 'Global', session: 'Per session', scopeProject: 'Project',
     credentialExpiring: 'Credential expiring soon', credentialExpired: 'Credential expired',
@@ -229,17 +229,27 @@ async function loadAll() {
  * 不阻塞画面：先刷新状态，检查结果回来再刷新一次列表。
  */
 async function runHealthCheck({ connectorId = '', deep = true, silent = false } = {}) {
+  // 深度检查要握手甚至跑业务探针（实测 8s+），先给个忙碌反馈，别让按钮看起来没响应。
+  const btn = document.getElementById('btn-check');
+  const prevLabel = btn ? btn.textContent : '';
+  if (btn && deep) { btn.disabled = true; btn.textContent = t('checking'); }
   const payload = {
     ...(connectorId ? { connectorId } : {}),
     deep,
     force: true,
     // 不传 workspaceId / connectionKey：否则后端走 scoped 分支、不写健康缓存。
   };
-  const res = await call('healthCheck', payload);
-  if (!silent) toast(res.ok ? t('checkedOk') : (res.message || t('checkedFail')), res.ok ? '' : 'bad');
-  const workspaceParams = state.workspaceId ? { workspaceId: state.workspaceId } : {};
-  const again = await call('status', workspaceParams);
-  if (again.ok) { state.items = again.detail?.items ?? []; render(); }
+  let res;
+  try {
+    res = await call('healthCheck', payload);
+    if (!silent) toast(res.ok ? t('checkedOk') : (res.message || t('checkedFail')), res.ok ? '' : 'bad');
+    render();
+    const workspaceParams = state.workspaceId ? { workspaceId: state.workspaceId } : {};
+    const again = await call('status', workspaceParams);
+    if (again.ok) { state.items = again.detail?.items ?? []; render(); }
+  } finally {
+    if (btn && deep) { btn.disabled = false; btn.textContent = prevLabel || t('check'); }
+  }
   return res;
 }
 
