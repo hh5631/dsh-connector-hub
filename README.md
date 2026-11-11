@@ -70,14 +70,15 @@
 ## 安装
 
 ```bash
-# 方式一：从本地路径（开发时最常用）
-dsh plugin --profile web add /Users/wanghao/DSH/dsh-connector-hub
+# 方式一：预构建 tarball（推荐，无需构建授权）
+dsh plugin --profile web add https://github.com/hh5631/dsh-connector-hub/releases/latest/download/dsh-connector-hub.tgz
 
-# 方式二：包发布后
-dsh plugin --profile web add dsh-connector-hub
+# 方式二：直接从 GitHub 源码安装
+dsh plugin --profile web add github:hh5631/dsh-connector-hub
 
-# 或使用随包脚本（含 bundle 注册兜底）
-bash install.sh
+# 方式三：本地克隆后安装（开发时最常用）
+git clone https://github.com/hh5631/dsh-connector-hub.git
+dsh plugin --profile web add link:$PWD/dsh-connector-hub
 ```
 
 安装后**重启 `dsh web`** 才会加载新插件。之后：

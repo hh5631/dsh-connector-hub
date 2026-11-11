@@ -122,11 +122,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/duhu2000/dsh-connector-hub.git"
+    "url": "git+https://github.com/hh5631/dsh-connector-hub.git"
   },
-  "homepage": "https://github.com/duhu2000/dsh-connector-hub#readme",
+  "homepage": "https://github.com/hh5631/dsh-connector-hub#readme",
   "bugs": {
-    "url": "https://github.com/duhu2000/dsh-connector-hub/issues"
+    "url": "https://github.com/hh5631/dsh-connector-hub/issues"
   },
   "dsh": {
     "bundle": {
