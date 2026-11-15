@@ -1,15 +1,24 @@
-/* 连接器 — 视觉系统 v5「极简」
+/* 连接器 — 视觉系统 v7「拼图 · 等高 · 顺势」
  *
  * 隐喻：一张服务清单 + 一个拉出来的抽屉。目录就是主体，
  * 已连接的应用收在右上角，点开才占地方。
  *
+ * v7 在此之上补三件事：图标换成拼图块（插件隐喻）、
+ * 栅格卡片强制等高、翻页与切分类时内容交叉淡入。
+ *
+ * 唯一目标仍是隐入 DSH 宿主，而不是自成一套品牌。
+ * 配色、线宽、圆角、字号全部取自 DSH 主界面实测值——
+ *   纯白底 #ffffff / 文字 #0f1115 / 次级 #61666b /
+ *   0.5px 发丝线 / 控件 8px、卡片 12px 圆角 / 字距 0。
+ * 宿主把字体与字号通过 --dsh-* 变量注入，这里只跟随，不覆盖。
+ *
  * 规则：
  *   - 颜色全部有语义：绿=已连 / 琥珀=待确认 / 红=失效 / 灰=未启用。
- *     强调色（玉绿）只出现在选中、焦点与主操作。
+ *     强调色只出现在选中、焦点与主操作，绝不铺成大块底色。
  *   - 结构靠对齐与留白，线只用在「真的分隔内容」的地方。
  *   - 数字一律 tabular-nums，让计数在切页时不抖动。
- *   - 圆角只有两档：控件 6px，弹层 14px。
- *   - 动效只回应操作（悬停、抽屉展开），不做入场动画。
+ *   - 动效只回应操作，统一 120–160ms 曲线，不做入场动画。
+ *   - 尺寸自适应：间距 clamp() + 栅格 auto-fill + 顶栏小屏折叠。
  *
  * 明暗两套令牌对齐 DSH 宿主；字体与字号跟随宿主设置注入的 CSS 变量。
  */
@@ -17,32 +26,39 @@
 :root {
   color-scheme: light dark;
 
-  /* 纸感浅灰绿，避开暖米色与纯白的模板感 */
-  --bg: #f5f7f6;
+  /* 纯白底与中性灰，取自 DSH 主界面 getComputedStyle 实测 */
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #fafbfa;
-  --line: #e3e7e4;
-  --line-strong: #cfd6d1;
+  --surface-2: #f7f8f9;
+  --surface-3: #f1f3f4;
+  --line: rgba(15, 17, 21, .08);
+  --line-strong: rgba(15, 17, 21, .16);
+  --hairline: var(--dsh-hairline-width, .5px);
 
-  --text: #14201c;
-  --text-2: #4a5751;
-  --text-3: #8a958f;
+  --text: #0f1115;
+  --text-2: #61666b;
+  --text-3: #9298a0;
 
-  --accent: #1f6f5c;
-  --accent-soft: #e8f1ee;
-  --focus: #1f6f5c;
+  --accent: #1a7f64;
+  --accent-soft: rgba(26, 127, 100, .08);
+  --focus: #1a7f64;
 
-  --ok: #1f8a5b;
-  --ok-soft: #e6f3ec;
-  --warn: #a86e08;
-  --warn-soft: #f8f0df;
-  --bad: #b4342a;
-  --bad-soft: #f9e9e7;
-  --idle: #9aa5a0;
-  --idle-soft: #f0f2f1;
+  --ok: #2e9e6b;
+  --ok-soft: rgba(46, 158, 107, .09);
+  --warn: #b58414;
+  --warn-soft: rgba(181, 132, 20, .09);
+  --bad: #c4503f;
+  --bad-soft: rgba(196, 80, 63, .08);
+  --idle: #9298a0;
+  --idle-soft: rgba(15, 17, 21, .04);
 
-  --r: 6px;
+  /* DSH 实测：控件 8px / 卡片 12px / 弹层 14px */
+  --r: 8px;
+  --r-card: 12px;
   --r-pop: 14px;
+  --ease: cubic-bezier(.2, .8, .3, 1);
+  --t-fast: 120ms;
+  --t-med: 160ms;
 
   --sans: var(--dsh-font-family-text, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif);
   --mono: var(--dsh-font-family-code, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace);
@@ -51,34 +67,39 @@
   --fs-code: var(--dsh-code-font-size, 11px);
 
   --gutter: 34px;
-  --maxw: 1080px;
+  /* 宽屏跟随面板展开，但留出可读行宽上限，避免超宽时一行过长 */
+  --maxw: 1360px;
+  /* 左右边距：窄屏用 --gutter；超宽时自动把内容居中，
+     顶栏与内容共用同一个值，左右边缘始终对齐。 */
+  --edge: max(var(--gutter), calc((100% - var(--maxw)) / 2));
   --drawer: 400px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0e1412;
-    --surface: #141b18;
-    --surface-2: #17201c;
-    --line: #232d29;
-    --line-strong: #33403a;
+    --bg: #14161a;
+    --surface: #1a1d22;
+    --surface-2: #202429;
+    --surface-3: #262b31;
+    --line: rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .18);
 
-    --text: #edf2ef;
-    --text-2: #a3b0aa;
-    --text-3: #6f7c76;
+    --text: #f2f4f6;
+    --text-2: #a8aeb6;
+    --text-3: #767d86;
 
-    --accent: #5bc8a9;
-    --accent-soft: #16281f;
-    --focus: #5bc8a9;
+    --accent: #66c7a8;
+    --accent-soft: rgba(102, 199, 168, .12);
+    --focus: #66c7a8;
 
-    --ok: #4cc38a;
-    --ok-soft: #16281f;
-    --warn: #e0a13a;
-    --warn-soft: #2a2113;
-    --bad: #f08175;
-    --bad-soft: #2c1815;
-    --idle: #6f7c76;
-    --idle-soft: #1b2420;
+    --ok: #5cc48d;
+    --ok-soft: rgba(92, 196, 141, .12);
+    --warn: #e3b25c;
+    --warn-soft: rgba(227, 178, 92, .12);
+    --bad: #ef9389;
+    --bad-soft: rgba(239, 147, 137, .12);
+    --idle: #767d86;
+    --idle-soft: rgba(255, 255, 255, .05);
   }
 }
 
@@ -92,9 +113,15 @@ body {
   color: var(--text);
   font: var(--fs-base) / 1.6 var(--sans);
   font-feature-settings: "kern" 1;
+  letter-spacing: 0;              /* 跟随 DSH 宿主：不用负字距 */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* 滚动条常驻占位，弹层开合时内容不横向跳动。
+     body 本身不滚动，真正滚的是 .content —— 占位必须设在那上面才有效。 */
+  scrollbar-gutter: stable;
 }
+/* 抽屉/弹层打开时锁住背景滚动；内容区自身仍可滚。 */
+body.drawer-open, body.dialog-open { overflow: hidden; }
 
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
@@ -107,27 +134,37 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .main { height: 100%; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
 
 /* ── 顶栏 ─────────────────────────────────────────────── */
+/* 顶栏与内容同色，仅用一条 0.5px 发丝线分隔；DSH 设置页即此做法。 */
 .topbar {
-  display: flex; align-items: center; gap: 14px;
-  padding: 18px var(--gutter) 16px;
+  display: flex; align-items: center; gap: 12px;
+  padding: clamp(12px, 1.6vw, 18px) var(--edge) clamp(12px, 1.4vw, 16px);
   flex: none; flex-wrap: wrap;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  border-bottom: var(--hairline) solid var(--line);
 }
 .topbar h1 {
-  margin: 0; font-size: 16px; font-weight: 650;
-  letter-spacing: -.025em; line-height: 1.2;
+  margin: 0; font-size: 16px; font-weight: 600;
+  letter-spacing: 0; line-height: 1.3;
 }
+/* 品牌记号：与侧边栏入口同一枚**空心**拼图字形。
+   不做黑底方块——DSH 宿主自己的图标都是纯描边、无底，套一个黑块反而突兀。 */
+.brand-mark {
+  display: inline-grid; place-items: center;
+  width: 22px; height: 22px; flex: none;
+  color: var(--text);
+  margin-right: -1px;
+}
+.brand-mark svg { display: block; }
 .topbar .crumb { font-size: 12px; color: var(--text-3); }
 .topbar .spacer { flex: 1; }
 
 .search {
   display: flex; align-items: center; gap: 7px;
   background: var(--surface-2);
-  border: 1px solid var(--line);
+  border: var(--hairline) solid var(--line);
   border-radius: var(--r);
-  padding: 0 10px; width: 220px; height: 32px;
-  transition: border-color .12s ease, box-shadow .12s ease;
+  padding: 0 10px; width: clamp(160px, 20vw, 240px); height: 32px;
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
 }
 .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .search .icon { color: var(--text-3); font-size: 13px; line-height: 1; }
@@ -139,7 +176,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border: 0; background: transparent; color: var(--text-2);
   padding: 6px 9px; cursor: pointer; font-size: 12.5px;
   border-radius: var(--r);
-  transition: background .12s ease, color .12s ease;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
 .tbtn:hover { background: var(--surface-2); color: var(--text); }
 .tbtn.strong { color: var(--accent); font-weight: 600; }
@@ -153,9 +190,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .connected-btn {
   display: inline-flex; align-items: center; gap: 7px;
   height: 32px; padding: 0 12px;
-  border: 1px solid var(--line-strong);
+  border: var(--hairline) solid var(--line-strong);
   background: var(--surface-2);
-  color: var(--text-2); font-weight: 550;
+  color: var(--text-2); font-weight: 500;
+  border-radius: var(--r);
+  transition: border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
 }
 .connected-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .connected-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
@@ -163,137 +202,342 @@ button, input, select, textarea { font: inherit; color: inherit; }
   min-width: 18px; text-align: center;
   font: 600 11px/1 var(--mono);
   background: var(--surface); border-radius: 999px; padding: 3px 5px;
-  border: 1px solid var(--line);
+  border: var(--hairline) solid var(--line);
 }
 .connected-btn .count:empty { display: none; }
 
 .content {
   flex: 1; overflow-y: auto;
-  padding: 24px var(--gutter) 60px;
+  /* 滚动条常驻占位：从「骨架只有 6 张（不滚）」切到「12 张（滚）」时，
+     内容宽度不会因为滚动条出现而突然缩 8px，卡片列数也就不会闪一下。 */
+  scrollbar-gutter: stable;
+  padding: clamp(18px, 2.4vw, 28px) var(--edge) 60px;
 }
-.content > * { max-width: var(--maxw); }
 
 /* ── 区块标题 ─────────────────────────────────────────── */
 .section-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 12px; }
-.section-head h3 { margin: 0; font-size: 13px; font-weight: 650; letter-spacing: -.01em; }
+.section-head h3 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0; }
 .section-head .count { font: 400 11px/1 var(--mono); color: var(--text-3); }
 .section-head .spacer { flex: 1; }
 
-/* ── 分组导航：下划线选中 ─────────────────────────────── */
+/* ── 分组导航：一枚滑动的墨条 + 计数 ──────────────────────
+ * 不用「每个按钮各有一条下划线」——那是网页控件的样子。
+ * 选中态由一枚横向滑动的墨条表示，切换时它滑到目标按钮下方，
+ * 像原生分段控件那样有连续的方向感；计数用等宽数字，切换不抖。
+ */
+/* 吸顶：目录可能上百条，滚到后面还得能切分类。
+   背景用不透明 --bg 才能在滚动中盖住下面的卡片；负 margin 让吸顶时
+   仍然贴住内容左右边距，不会突然变宽。 */
 .groupbar {
-  display: flex; gap: 22px; flex-wrap: wrap;
-  border-bottom: 1px solid var(--line);
-  margin: 0 0 18px;
+  position: sticky; top: 0; z-index: 5;
+  display: flex; gap: clamp(16px, 2vw, 26px); flex-wrap: wrap;
+  margin: 0 0 20px;
+  padding-bottom: 2px;
+  border-bottom: var(--hairline) solid var(--line);
+  background: var(--bg);
+  /* 顶部再垫一层同色，滚上去的分组条上方不会漏出卡片 */
+  box-shadow: 0 -18px 0 var(--bg);
+}
+/* 吸顶条下方一道极淡的渐隐：卡片滑进来时被柔和盖住，
+   而不是在边框处被硬切一刀。同色渐变，任何主题下都成立。 */
+.groupbar::after {
+  content: "";
+  position: absolute; left: 0; right: 0; top: 100%;
+  height: 16px; pointer-events: none;
+  background: linear-gradient(to bottom, var(--bg), transparent);
+}
+/* 窄面板里分组条改为横向滑动的一行：折行会让墨条与选中项错位，
+   也不利于「一眼扫完所有分类」。隐藏滚动条，保留滑动与键盘可达。 */
+@media (max-width: 860px) {
+  .groupbar {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    gap: 18px; padding-bottom: 0;
+    border-bottom: 0;
+    scroll-snap-type: x proximity;
+    /* 横向滑动与吸顶同时存在时，iOS 需要显式声明纵向不滚 */
+    overscroll-behavior-x: contain;
+  }
+  .groupbar::-webkit-scrollbar { display: none; }
+  .groupbar button { flex: none; scroll-snap-align: start; }
+  /* 仍有底部分隔感：横线画在容器上，不再依赖按钮折行 */
+  .groupbar { border-bottom: var(--hairline) solid var(--line); padding-bottom: 2px; }
 }
 .groupbar button {
+  position: relative;
   border: 0; background: transparent; color: var(--text-3);
-  padding: 0 0 10px; cursor: pointer; font-size: 12.5px;
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
-  transition: color .12s ease, border-color .12s ease;
+  padding: 0 0 11px; cursor: pointer; font-size: 12.5px; line-height: 1.2;
+  transition: color var(--t-med) var(--ease);
 }
-.groupbar button:hover { color: var(--text); }
-.groupbar button[aria-pressed="true"] { color: var(--accent); font-weight: 600; border-bottom-color: var(--accent); }
-.groupbar button .n { font: 400 10.5px/1 var(--mono); color: var(--text-3); margin-left: 5px; }
-.groupbar button[aria-pressed="true"] .n { color: var(--accent); }
+.groupbar button:hover { color: var(--text-2); }
+.groupbar button[aria-pressed="true"] { color: var(--text); font-weight: 600; }
+.groupbar button .n {
+  font: 400 10.5px/1 var(--mono); color: var(--text-3);
+  margin-left: 5px; font-variant-numeric: tabular-nums;
+  transition: color var(--t-med) var(--ease);
+}
+.groupbar button[aria-pressed="true"] .n { color: var(--text-2); }
+/* 分组条骨架：与真实按钮同高同间距，数据到达时只是把灰条换成文字 */
+/* 高度必须与真实按钮逐像素一致（26px = 文字行高 15 + 下内距 11）。
+   注意必须用 height 而不是 min-height：box-sizing: border-box 下
+   min-height 会被 padding 吃掉，骨架只剩 21px，数据回来时仍会跳 5px。 */
+.groupbar-sk {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; box-sizing: border-box;
+  padding-bottom: 11px; flex: none;
+}
+.groupbar-sk i {
+  display: block; height: 10px; border-radius: 3px;
+  background: var(--line);
+  animation: sk-pulse 1.4s var(--ease) infinite;
+}
+.groupbar-sk i.n { height: 8px; opacity: .7; }
+@keyframes sk-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .groupbar-sk i { animation: none; } }
+
+/* 墨条：only 一枚，靠 transform 滑行，避免逐帧布局 */
+.groupbar-ink {
+  position: absolute; left: 0; top: 0;
+  height: 2px; width: 0; border-radius: 2px;
+  background: var(--text);
+  opacity: 0;
+  transition:
+    transform 240ms var(--ease),
+    width 240ms var(--ease),
+    opacity var(--t-fast) linear;
+  pointer-events: none;
+}
+.groupbar-ink[data-ready="1"] { opacity: 1; }
+/* 空数据（或首屏未加载）时：高度照留，只是看不见内容。
+   用 min-height 固定住那一行按钮的高度，避免「隐藏→出现」把下方推来推去。 */
+.groupbar[data-empty="1"] {
+  min-height: 28.5px;
+  border-bottom-color: transparent;
+  pointer-events: none;
+}
+.groupbar[data-empty="1"] .groupbar-ink { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .groupbar-ink { transition: none; } }
 
 /* ── 目录：列表 / 栅格 双布局 ────────────────────────── */
 .grid { display: flex; flex-direction: column; }
 .grid-list { gap: 0; }
+/* 栅格：卡片高度**逐行一致**。行高由内容决定是列表的毛病；
+   这里把描述收成两行、名称/厂商各收一行，所有卡片同高，行与行不再参差。 */
 .grid-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(min(232px, 100%), 1fr));
+  grid-auto-rows: 1fr;
+  gap: 10px;
 }
+
+/* 卡片本体：列表视图 = 一行；栅格视图 = 一张卡。两者共用排版语义。 */
 .tile {
-  display: grid; grid-template-columns: 28px minmax(0, 1fr) auto;
-  gap: 13px; align-items: start;
-  padding: 13px 12px 14px 12px;
-  border-bottom: 1px solid var(--line);
-  border-radius: var(--r);
-  transition: background .12s ease;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 10px 12px 12px;
+  border-bottom: var(--hairline) solid var(--line);
+  border-radius: var(--r-card);
+  transition: background var(--t-fast) var(--ease);
 }
-.tile:hover { background: var(--surface); }
-.grid-cards .tile {
-  grid-template-columns: 28px minmax(0, 1fr);
-  border: 1px solid var(--line);
-  padding: 14px;
-  background: var(--surface);
-}
-.grid-cards .tile:hover { border-color: var(--line-strong); background: var(--surface-2); }
-.grid-cards .tile-foot { grid-column: 1 / -1; padding-top: 2px; }
+.tile:hover { background: var(--surface-2); }
 .tile:last-child { border-bottom: 0; }
-.grid-cards .tile:last-child { border-bottom: 1px solid var(--line); }
-/* 已连接的目录项左侧留一道玉绿短脊，一眼看出哪些已经接上 */
+
+.grid-cards .tile {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto 1fr;
+  align-items: stretch;
+  gap: 0;
+  padding: 14px 14px 11px;
+  border: var(--hairline) solid var(--line);
+  background: var(--surface);
+  border-radius: var(--r-card);
+  /* 极轻的落地感：hover 只抬 0.5px 亮度，不投阴影，保持平面原生感 */
+  transition:
+    background var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease);
+}
+.grid-cards .tile:hover { border-color: var(--line-strong); background: var(--surface); }
+.grid-cards .tile:last-child { border-bottom: var(--hairline) solid var(--line); }
+/* 已连接：只在列表视图给一道左侧短脊；栅格里由名字后的绿点表达，不重复 */
 .tile[data-connected="1"] { position: relative; }
-.tile[data-connected="1"]::before {
-  content: ""; position: absolute; left: 0; top: 16px;
-  width: 2px; height: 14px; border-radius: 1px;
+.grid-list .tile[data-connected="1"]::before {
+  content: ""; position: absolute; left: 0; top: 50%;
+  width: 2px; height: 16px; margin-top: -8px;
+  border-radius: 2px; background: var(--ok);
+}
+
+/* 头部：图标 + 名称/厂商（名称一行省略，绝不把绿点挤到下一行） */
+.tile-head { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.tile-ident { min-width: 0; }
+.tile-icon {
+  flex: none;
+  width: 30px; height: 30px; display: grid; place-items: center;
+  border: var(--hairline) solid var(--line); border-radius: 9px;
+  font: 600 11px/1 var(--sans); color: var(--text-2);
+  background: var(--surface-2);
+  overflow: hidden;
+  transition: border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.grid-cards .tile:hover .tile-icon { border-color: var(--line-strong); }
+.tile-icon svg { width: 16px; height: 16px; color: currentColor; }
+.tile-icon .ci-img { width: 19px; height: 19px; object-fit: contain; border-radius: 4px; }
+.tile-icon .ci-emoji { font-size: 14px; line-height: 1; }
+/* 已连接卡片的图标框转为极淡的绿底，颜色仍是中性，只有一点点语义 */
+.tile[data-connected="1"] .tile-icon { color: var(--ok); border-color: transparent; background: var(--ok-soft); }
+
+.tile-name {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 13px; font-weight: 600; letter-spacing: 0; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-height: 18px;
+}
+.tile-vendor {
+  margin-top: 2px;
+  font-size: 11px; color: var(--text-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tile-vendor .chip { margin-left: 2px; }
+.tile-desc {
+  min-width: 0;
+  font-size: 12px; color: var(--text-2); line-height: 1.55;
+}
+.tile-desc-clamp { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 元信息：分类 · 鉴权，用 2px 小圆点分隔（比空格清楚、比竖线轻） */
+.tile-tags {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 11px; color: var(--text-3); white-space: nowrap;
+}
+.tile-tags > span + span::before {
+  content: ""; display: inline-block;
+  width: 2px; height: 2px; border-radius: 50%;
+  background: currentColor; opacity: .5;
+  margin-right: 8px; vertical-align: 3px;
+}
+
+/* 列表行：图标 | 名称/简介 | 分类·鉴权 | 操作
+   末列给固定宽度：无论按钮写「连接」还是「已连接」，右边缘都对齐成一条线，
+   否则每行文字长度不同，右边界会呈锯齿状。 */
+.grid-list .tile { grid-template-columns: 30px minmax(0, 1fr) auto 62px; }
+.grid-list .tile-tags { grid-column: 3; justify-content: flex-end; }
+.grid-list .tile-foot { grid-column: 4; justify-content: flex-end; }
+
+/* 栅格卡片：标题块 / 两行简介 / 底部（元信息 + 操作） */
+.grid-cards .tile-desc {
+  margin-top: 8px;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  line-clamp: 2; overflow: hidden;
+  /* 永远占满两行：这是「每张卡片同高」的关键，而不是靠内容多少撞运气 */
+  min-height: calc(2 * 1.55em);
+}
+.tile-foot {
+  display: flex; align-items: center; gap: 8px;
+  min-width: 0;
+}
+.grid-cards .tile-foot {
+  grid-row: 3; align-self: end;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+/* 卡片主操作：文字按钮，不是实心大片色。悬停才显山露水。 */
+.tile-act {
+  border: 0; background: transparent; cursor: pointer;
+  padding: 4px 8px; margin: -4px -8px -4px 0;
+  border-radius: var(--r); font-size: 12px; font-weight: 600;
+  color: var(--text-2); white-space: nowrap;
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.tile-act:hover { color: var(--accent); background: var(--accent-soft); }
+/* 已连接：弱化成安静的「已连接」，不再催促点击 */
+.tile-act.is-on { color: var(--text-3); font-weight: 500; }
+.tile-act.is-on:hover { color: var(--text-2); background: var(--surface-3); }
+.tile-act:disabled { opacity: .38; cursor: not-allowed; background: transparent; }
+
+/* 已连接绿点：5px，跟着名字走，不抢视线的同时可被扫读 */
+.dot-ok {
+  display: inline-block; flex: none;
+  width: 5px; height: 5px; border-radius: 50%;
   background: var(--ok);
 }
-.grid-cards .tile[data-connected="1"]::before { display: none; }
 
-.tile-icon {
-  width: 26px; height: 26px; display: grid; place-items: center;
-  border: 1px solid var(--line-strong); border-radius: var(--r);
-  font: 600 11px/1 var(--sans); color: var(--text-2);
-  background: var(--surface); overflow: hidden;
-}
-.tile-icon svg { width: 16px; height: 16px; color: var(--accent); }
-.tile-icon .ci-img { width: 18px; height: 18px; object-fit: contain; border-radius: 3px; }
-.tile-icon .ci-emoji { font-size: 14px; line-height: 1; }
-.tile-name { font-size: 13px; font-weight: 620; letter-spacing: -.01em; }
-.tile-vendor { font-size: 11px; color: var(--text-3); margin-top: 1px; }
-.tile-desc { font-size: 12px; color: var(--text-2); margin-top: 4px; line-height: 1.5; }
-.tile-desc-clamp { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tile-tags { display: flex; gap: 12px; margin-top: 6px; font-size: 11px; color: var(--text-3); flex-wrap: wrap; }
-.tile-foot { display: flex; align-items: center; gap: 10px; }
-/* 列表视图里已连接的绿点，跟在名字后面 */
-.dot-ok {
-  display: inline-block; width: 5px; height: 5px; border-radius: 50%;
-  background: var(--ok); margin-left: 2px; vertical-align: middle;
-}
-
-/* 区块标题右侧的列表 / 栅格切换 */
+/* 区块标题右侧的列表 / 栅格切换：一枚轻巧的分段控件 */
 .layout-switch {
   display: inline-flex; align-self: center;
-  border: 1px solid var(--line); border-radius: var(--r); overflow: hidden;
+  gap: 1px; padding: 2px;
+  border: var(--hairline) solid var(--line); border-radius: 9px;
+  background: var(--surface-2);
 }
 .layout-switch button {
   display: inline-grid; place-items: center;
-  width: 28px; height: 24px;
-  border: 0; background: transparent; color: var(--text-3);
-  cursor: pointer; transition: background .12s ease, color .12s ease;
+  width: 26px; height: 22px;
+  border: 0; border-radius: 7px; background: transparent; color: var(--text-3);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
 }
-.layout-switch button + button { border-left: 1px solid var(--line); }
-.layout-switch button:hover { background: var(--surface-2); color: var(--text); }
-.layout-switch button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.layout-switch button:hover { color: var(--text); }
+.layout-switch button[aria-pressed="true"] {
+  background: var(--surface); color: var(--text);
+  box-shadow: 0 1px 2px rgba(15, 17, 21, .07);
+}
+@media (prefers-color-scheme: dark) {
+  .layout-switch button[aria-pressed="true"] { box-shadow: none; background: var(--surface-3); }
+}
+
+/* ── 内容切换：交叉淡入，而不是整屏闪一下 ───────────────
+ * 翻页 / 切分类 / 换布局都是「同一块区域换内容」。
+ * 离开 90ms：整块轻轻上浮并淡出；入场 200ms：从下方 5px 淡入。
+ * 两段都在百毫秒级，方向感清楚又不拖沓；reduced-motion 下直接换。
+ */
+#rows { will-change: opacity, transform; }
+
+.rows-leaving {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 90ms var(--ease), transform 90ms var(--ease);
+}
+.rows-enter { animation: rows-enter 200ms var(--ease) both; }
+@keyframes rows-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rows-leaving, .rows-enter { transition: none; animation: none; opacity: 1; transform: none; }
+}
 
 /* ── 已连接抽屉（右侧滑出） ───────────────────────────── */
 .scrim {
   position: fixed; inset: 0; z-index: 30;
-  background: rgba(20, 32, 28, .18);
-  animation: fade-in .12s ease;
+  background: rgba(15, 17, 21, .16);
+  animation: fade-in var(--t-fast) var(--ease);
 }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
+/* 抽屉是一块浮起来的纸：0.5px 侧边线 + 一道很淡的投影，不用毛玻璃。
+   宽度窄时留一点主体可见，宽时封顶 --drawer。 */
 .drawer {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 35;
   width: min(var(--drawer), 92vw);
   display: flex; flex-direction: column;
-  background: var(--surface);
-  border-left: 1px solid var(--line);
-  box-shadow: -18px 0 48px -20px rgba(20, 32, 28, .3);
-  animation: drawer-in .16s cubic-bezier(.2, .8, .3, 1);
+  background: var(--bg);
+  border-left: var(--hairline) solid var(--line);
+  box-shadow: -24px 0 64px -24px rgba(15, 17, 21, .18);
+  animation: drawer-in var(--t-med) var(--ease);
 }
 @keyframes drawer-in { from { transform: translateX(12px); opacity: .6; } to { transform: none; opacity: 1; } }
 
 .drawer-head {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: 10px;
   padding: 18px 20px 14px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: var(--hairline) solid var(--line);
   flex: none;
 }
-.drawer-head h2 { margin: 0; font-size: 14px; font-weight: 650; letter-spacing: -.015em; }
+/* 抽屉容器自身可聚焦（程序化），但不该画焦点环 */
+.drawer:focus, .drawer:focus-visible { outline: none; }
+.drawer-head h2 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0; }
 .drawer-head .tbtn { margin-left: auto; }
 
 .drawer-stats { display: flex; gap: 6px; padding: 12px 20px 0; flex: none; }
@@ -304,33 +548,64 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background: var(--idle-soft);
   border-radius: 999px; padding: 3px 11px 3px 9px;
 }
-.stat b { font: 650 12.5px/1 var(--sans); color: var(--text); }
+.stat b { font: 600 12.5px/1 var(--sans); color: var(--text); font-variant-numeric: tabular-nums; }
 .stat.ok { background: var(--ok-soft); color: var(--ok); }
 .stat.ok b { color: var(--ok); }
 .stat.bad { background: var(--bad-soft); color: var(--bad); }
 .stat.bad b { color: var(--bad); }
 
-.drawer-body { flex: 1; overflow-y: auto; padding: 14px 12px 40px; }
+.drawer-body { flex: 1; overflow-y: auto; padding: 12px 10px 40px; }
 .drawer-body .rows { display: flex; flex-direction: column; }
 
-/* ── 连接行：左侧一道状态竖脊 ─────────────────────────── */
+/* ── 连接行：左侧一道状态竖脊 ───────────────────────────
+ * 抽屉列表与目录列表保持同一套排版：图标 | 内容 | 操作，
+ * 三条信息（鉴权 / 传输 / 作用域）用中圆点分隔，状态只靠药丸与竖脊。
+ */
 .row {
   position: relative;
-  display: grid; grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px; align-items: start;
-  padding: 13px 10px 13px 18px;
-  border-bottom: 1px solid var(--line);
-  border-radius: var(--r);
-  transition: background .12s ease;
+  display: grid; grid-template-columns: 30px minmax(0, 1fr);
+  gap: 12px; align-items: start;
+  padding: 12px 12px 12px 16px;
+  border-bottom: var(--hairline) solid var(--line);
+  border-radius: var(--r-card);
+  transition: background var(--t-fast) var(--ease);
 }
+/* 元信息行与动作共处一行：左边「鉴权 · 传输 · 作用域」，右边贴边对齐操作。
+   这样无论行是正常还是异常，动作都在同一位置、同一高度，行高也稳定。 */
+.row-line {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 4px; min-height: 22px;
+}
+.row-line .row-meta { margin-top: 0; flex: 1; min-width: 0; }
+/* 动作平时隐去，行被悬停 / 聚焦 / 有问题时出现：安静的抽屉不该到处是按钮 */
+.row-actions {
+  display: flex; align-items: center; gap: 2px;
+  white-space: nowrap; margin: 0;
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease);
+}
+.row:hover .row-actions,
+.row:focus-within .row-actions,
+.row[data-attention="1"] .row-actions { opacity: 1; }
+.row-icon {
+  width: 30px; height: 30px; display: grid; place-items: center;
+  border: var(--hairline) solid var(--line); border-radius: 9px;
+  background: var(--surface-2); overflow: hidden;
+  color: var(--text-2); font: 600 11px/1 var(--sans);
+}
+.row-icon svg { width: 16px; height: 16px; color: currentColor; }
+.row-icon .ci-img { width: 19px; height: 19px; object-fit: contain; border-radius: 4px; }
+.row-icon .ci-emoji { font-size: 14px; line-height: 1; }
+.row[data-readiness="verified"] .row-icon { color: var(--ok); border-color: transparent; background: var(--ok-soft); }
+.row[data-readiness="credential-invalid"] .row-icon { color: var(--bad); border-color: transparent; background: var(--bad-soft); }
 .row:last-child { border-bottom: 0; }
 .row:hover { background: var(--surface-2); }
 .row::before {
   content: ""; position: absolute;
-  left: 2px; top: 15px; bottom: 15px;
+  left: 2px; top: 50%; margin-top: -10px; height: 20px;
   width: 3px; border-radius: 2px;
   background: var(--line-strong);
-  transition: background .16s ease;
+  transition: background var(--t-med) var(--ease);
 }
 .row[data-readiness="verified"]::before { background: var(--ok); }
 .row[data-readiness="unknown"]::before { background: var(--warn); }
@@ -339,8 +614,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .row-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .row-title strong {
-  font-size: 13px; font-weight: 620;
-  letter-spacing: -.012em; color: var(--text);
+  font-size: 13px; font-weight: 600;
+  letter-spacing: 0; color: var(--text);
 }
 .chip { font: 400 var(--fs-code)/1.5 var(--mono); color: var(--text-3); }
 
@@ -356,41 +631,65 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .state-label.bad { background: var(--bad-soft); color: var(--bad); }
 .state-label.idle { background: var(--idle-soft); color: var(--text-3); }
 
+/* 抽屉行主区：名称行与元信息行贴紧，行距比目录卡片更紧（信息密度更高） */
+.row-main { min-width: 0; }
+
+/* 抽屉行元信息也用中圆点分隔，与目录卡片同一种语法 */
 .row-meta {
-  display: flex; gap: 6px 14px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-top: 5px; font-size: 11.5px; color: var(--text-3);
 }
-.row-meta > span { line-height: 1.5; }
+.row-meta > span + span::before {
+  content: ""; display: inline-block;
+  width: 2px; height: 2px; border-radius: 50%;
+  background: currentColor; opacity: .5;
+  margin-right: 8px; vertical-align: 3px;
+}
 
 .row-note { margin-top: 6px; font-size: 11.5px; color: var(--text-2); line-height: 1.55; }
 .row-note.bad { color: var(--bad); }
 .row-note.warn { color: var(--warn); }
 
-.row-actions {
-  display: flex; align-items: center; gap: 3px;
-  padding-top: 0; white-space: nowrap;
-  opacity: .72; transition: opacity .12s ease;
-}
-.row:hover .row-actions, .row:focus-within .row-actions { opacity: 1; }
 .row-actions .tbtn { font-size: 11.5px; padding: 4px 7px; }
+/* 次要动作（停用）平时更淡，鼠标进入该行才升到正常对比 */
+.row-actions .tbtn:not(.fix):not(.danger) { color: var(--text-3); }
+.row:hover .row-actions .tbtn:not(.fix):not(.danger) { color: var(--text-2); }
 
 /* ── 分页 ─────────────────────────────────────────────── */
+/* 分页贴着内容走：左「上一页」右「下一页」，中间一行范围文案。
+   按钮做成轻量的圆形/胶囊控件，禁用态只是变淡，不跳布局。 */
 .pager {
-  display: flex; align-items: center; gap: 12px;
-  margin-top: 20px; padding-top: 14px;
-  border-top: 1px solid var(--line);
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 18px; padding-top: 12px;
+  border-top: var(--hairline) solid var(--line);
   font-size: 12px; color: var(--text-3);
 }
 .pager .info { font-variant-numeric: tabular-nums; }
 .pager .spacer { flex: 1; }
+.pager .tbtn {
+  display: inline-flex; align-items: center;
+  height: 26px; padding: 0 10px;
+  border: var(--hairline) solid var(--line); border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2); font-size: 12px;
+  transition:
+    color var(--t-fast) var(--ease),
+    background var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease),
+    opacity var(--t-fast) var(--ease);
+}
+.pager .tbtn:hover:not(:disabled) { color: var(--text); background: var(--surface-2); border-color: var(--line-strong); }
+.pager .tbtn:disabled { opacity: .32; cursor: default; background: transparent; }
+/* 页码「1 / 3」比范围文案重一档，眼睛先落在它上面 */
+.pager .info.page-no { color: var(--text-2); font-weight: 600; }
 
 /* ── 弹层 ─────────────────────────────────────────────── */
 .mask {
   position: fixed; inset: 0; z-index: 40;
-  background: rgba(20, 32, 28, .3);
+  background: rgba(15, 17, 21, .28);
   backdrop-filter: blur(2px);
-  display: grid; place-items: center; padding: 24px;
-  animation: mask-in .14s ease;
+  display: grid; place-items: center; padding: clamp(12px, 3vw, 24px);
+  animation: mask-in var(--t-med) var(--ease);
 }
 @media (prefers-color-scheme: dark) { .mask { background: rgba(0, 0, 0, .58); } }
 @keyframes mask-in { from { opacity: 0; } to { opacity: 1; } }
@@ -398,26 +697,26 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .dialog {
   width: min(440px, 100%); max-height: 86vh; overflow-y: auto;
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: var(--hairline) solid var(--line);
   border-radius: var(--r-pop);
-  padding: 26px 26px 22px;
-  box-shadow: 0 24px 60px -12px rgba(20, 32, 28, .28);
-  animation: dialog-in .16s cubic-bezier(.2, .8, .3, 1);
+  padding: clamp(20px, 3vw, 26px);
+  box-shadow: 0 24px 60px -12px rgba(15, 17, 21, .18);
+  animation: dialog-in var(--t-med) var(--ease);
 }
 @keyframes dialog-in {
   from { opacity: 0; transform: translateY(6px) scale(.99); }
   to { opacity: 1; transform: none; }
 }
-.dialog h2 { margin: 0 0 8px; font-size: 15px; font-weight: 650; letter-spacing: -.015em; }
+.dialog h2 { margin: 0 0 8px; font-size: 15px; font-weight: 600; letter-spacing: 0; }
 .dialog p { margin: 0 0 20px; font-size: 12.5px; color: var(--text-2); line-height: 1.65; }
 
 .field { margin-bottom: 15px; }
 .field label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 6px; font-weight: 550; }
 .field input, .field textarea, .field select {
   width: 100%; background: var(--surface-2);
-  border: 1px solid var(--line-strong);
+  border: var(--hairline) solid var(--line-strong);
   border-radius: var(--r); padding: 9px 11px; outline: 0; font-size: 13px;
-  transition: border-color .12s ease, box-shadow .12s ease;
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
 }
 .field input:focus, .field textarea:focus, .field select:focus {
   border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
@@ -428,25 +727,95 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
 .dialog-actions .tbtn { padding: 8px 14px; }
 .dialog-actions .tbtn.strong { background: var(--accent); color: #fff; }
-.dialog-actions .tbtn.strong:hover { background: var(--accent); filter: brightness(1.08); }
+.dialog-actions .tbtn.strong:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+/* 主按钮禁用时不要只剩 38% 透明（看起来像坏了），而是变成浅灰中性态 */
+.dialog-actions .tbtn.strong:disabled {
+  background: var(--surface-3); color: var(--text-3); opacity: 1; cursor: not-allowed;
+}
 
 /* ── Toast ────────────────────────────────────────────── */
+/* 底部居中浮起的提示。可点击收起，所以给明确的可点手感。 */
 .toast {
-  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
   background: var(--text); color: var(--bg);
-  padding: 10px 18px; border-radius: var(--r);
-  font-size: 12.5px; z-index: 60;
-  max-width: 82vw; text-align: center;
-  box-shadow: 0 10px 30px -10px rgba(20, 32, 28, .4);
+  padding: 9px 16px; border-radius: 999px;
+  font-size: 12.5px; line-height: 1.55; z-index: 60;
+  max-width: min(82vw, 520px); text-align: center;
+  box-shadow: 0 10px 30px -10px rgba(15, 17, 21, .32);
+  cursor: pointer;
+  animation: toast-in 180ms var(--ease) both;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }
 .toast[data-kind="bad"] { background: var(--bad); color: #fff; }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 
 /* ── 空状态与加载 ─────────────────────────────────────── */
-.empty { padding: 66px 20px; text-align: center; color: var(--text-3); font-size: 12.5px; line-height: 1.7; }
-.empty strong { display: block; color: var(--text); font-size: 14px; margin-bottom: 7px; font-weight: 620; letter-spacing: -.01em; }
-.loading { padding: 20px 0; color: var(--text-3); font-size: 12px; }
+/* 空状态：给一句解释 + 一个下一步。图标用极淡的描边，只在空的时候出现。 */
+.empty { padding: clamp(48px, 9vw, 80px) 20px; text-align: center; color: var(--text-3); font-size: 12.5px; line-height: 1.7; }
+.empty strong { display: block; color: var(--text); font-size: 13.5px; margin-bottom: 6px; font-weight: 600; letter-spacing: 0; }
+/* 空状态下给一个可执行的下一步，而不是让用户干瞪眼 */
+.empty-actions { margin-top: 16px; display: flex; justify-content: center; }
+.empty-actions .tbtn { padding: 5px 14px; }
+/* 首屏骨架：形状对齐真实卡片，数据到达时是「填内容」而不是「整屏重排」。
+   动画只有一道很慢的扫光，不用脉冲（脉冲在整屏 6 张上会显得吵）。 */
+/* 加载提示不再参与布局（见 hub.js setLoading）：它只服务读屏，
+   padding/margin 全为 0，即使被临时显示也不推任何内容。 */
+.loading { padding: 0; margin: 0; height: 0; overflow: hidden; color: var(--text-3); font-size: 12px; }
+/* 只在读屏里播报的文案（骨架可见时用） */
+.visually-hidden {
+  position: absolute !important; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+.skeleton {
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+  min-height: 143px;
+  position: relative; overflow: hidden;
+}
+.grid-list .skeleton {
+  min-height: 64px; border: 0; border-bottom: var(--hairline) solid var(--line);
+  border-radius: var(--r-card); background: transparent;
+}
+.skeleton::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, var(--line) 45%, transparent);
+  transform: translateX(-100%);
+  animation: skeleton-sweep 1.6s var(--ease) infinite;
+}
+@keyframes skeleton-sweep { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .skeleton::after { animation: none; } }
+/* 刷新中：按钮旁一个小小的转圈，说明「正在拿新数据」 */
+.tbtn[data-busy="1"] { color: var(--accent); pointer-events: none; }
+.tbtn[data-busy="1"]::after {
+  content: ""; display: inline-block;
+  width: 9px; height: 9px; margin-left: 6px;
+  border: 1.5px solid currentColor; border-right-color: transparent;
+  border-radius: 50%; vertical-align: -1px;
+  animation: spin 700ms linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tbtn[data-busy="1"]::after { animation: none; } }
 
-/* ── 响应式 ───────────────────────────────────────────── */
+/* ── 滚动条：对齐 DSH 宿主的细窄样式 ─────────────────── */
+.content, .drawer-body, .dialog { scrollbar-width: thin; }
+.content::-webkit-scrollbar, .drawer-body::-webkit-scrollbar, .dialog::-webkit-scrollbar { width: 8px; }
+.content::-webkit-scrollbar-thumb, .drawer-body::-webkit-scrollbar-thumb, .dialog::-webkit-scrollbar-thumb {
+  background: var(--line-strong); border-radius: 999px;
+  border: 2px solid transparent; background-clip: content-box;
+}
+.content::-webkit-scrollbar-thumb:hover, .drawer-body::-webkit-scrollbar-thumb:hover, .dialog::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3); background-clip: content-box;
+}
+
+/* ── 响应式：面板宽度自适应（iframe 可宽可窄） ────────── */
+@media (max-width: 1100px) {
+  :root { --gutter: 24px; }
+}
 @media (max-width: 860px) {
   :root { --gutter: 20px; }
   .content { padding: 18px var(--gutter) 40px; }
@@ -454,11 +823,43 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .topbar h1 { font-size: 15px; }
   .topbar .crumb { display: none; }
   .search { width: 100%; order: 9; }
-  .row { grid-template-columns: 1fr; }
-  .row-actions { padding-top: 6px; opacity: 1; }
+  .row { grid-template-columns: 28px minmax(0, 1fr); }
+  /* 窄面板放不下一行：元信息与动作分两行，动作始终可见（窄屏没有悬停概念） */
+  .row-line { flex-wrap: wrap; }
+  .row-actions { opacity: 1; margin-left: auto; }
   .tile { grid-template-columns: 26px minmax(0, 1fr); }
   .tile-foot { grid-column: 1 / -1; padding-top: 8px; }
   .drawer { width: 100vw; }
+}
+@media (max-width: 560px) {
+  :root { --gutter: 14px; }
+  .topbar { gap: 7px; }
+  /* 小屏把次要按钮收成一行，主操作仍可点 */
+  .topbar .tbtn { padding: 6px 7px; }
+  .topbar .connected-btn { padding: 0 9px; }
+  .groupbar { gap: 12px; }
+  .grid-cards { grid-template-columns: 1fr; }
+  .tile { gap: 10px; padding: 12px 8px; }
+  /* 窄屏列表：元信息不再是独立一列（那会把标题挤到只剩几个字），
+     改为落到简介下方。显式指定行号，避免 grid 自动放置把元信息排到首行。 */
+  .grid-list .tile {
+    grid-template-columns: 26px minmax(0, 1fr) 56px;
+    grid-template-rows: auto auto;
+    align-items: center;
+    row-gap: 3px;
+  }
+  .grid-list .tile-icon { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+  .grid-list .tile-ident { grid-column: 2; grid-row: 1; }
+  .grid-list .tile-tags {
+    grid-column: 2; grid-row: 2; justify-content: flex-start;
+    margin-top: 0;
+  }
+  .grid-list .tile-foot { grid-column: 3; grid-row: 1 / span 2; align-self: center; }
+  .drawer-head { padding: 14px 16px 12px; }
+  .drawer-stats { padding: 10px 16px 0; }
+  .drawer-body { padding: 12px 8px 32px; }
+  .row { gap: 10px; padding-left: 14px; }
+  .pager { gap: 8px; flex-wrap: wrap; }
 }
 
 @media (prefers-reduced-motion: reduce) {

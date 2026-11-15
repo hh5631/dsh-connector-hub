@@ -30,10 +30,10 @@ async function call(method, params = {}) {
       signal: controller.signal,
     });
     const data = await res.json();
-    if (!res.ok && data.ok !== false) return { ok: false, message: `请求失败（HTTP ${res.status}）` };
+    if (!res.ok && data.ok !== false) return { ok: false, message: t('reqFailedHttp', { status: res.status }) };
     return data;
   } catch (error) {
-    return { ok: false, message: error?.name === 'AbortError' ? '请求超时，请重试' : `请求失败：${error?.message || error}` };
+    return { ok: false, message: error?.name === 'AbortError' ? t('reqTimeout') : t('reqFailed', { msg: error?.message || error }) };
   } finally { clearTimeout(timer); }
 }
 
@@ -98,6 +98,50 @@ function writeSnapshot() {
 const el = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+/* 打开抽屉/对话框前记住焦点，关闭后归还，键盘用户不会「掉」回页面顶部。
+   用栈而非单槽：抽屉里再弹修复对话框时，逐层归还才不会把焦点丢给 body。 */
+const _focusStack = [];
+function captureFocus(origin) {
+  // 显式传入触发按钮最可靠（Safari 点击 button 不一定会聚焦）；否则退回 activeElement。
+  let a = origin;
+  if (!a) { try { a = document.activeElement; } catch { a = null; } }
+  _focusStack.push((a && typeof a.focus === 'function') ? a : null);
+}
+/* ── 焦点圈定 ─────────────────────────────────────────
+ * 抽屉与弹层都有遮罩，本质是模态：Tab 必须在里面打转，
+ * 不能让键盘用户一按 Tab 就掉到背后的目录里（那里点不到但有读屏）
+ * 或干脆跳出 iframe。两个容器共用一套实现，不做两遍。
+ */
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+function focusablesIn(node) {
+  if (!node || typeof node.querySelectorAll !== 'function') return [];
+  try { return [...node.querySelectorAll(FOCUSABLE)]; } catch { return []; }
+}
+/** 把 Tab / Shift+Tab 限制在 root 内；root 内没有可聚焦元素时保持焦点不动。 */
+function trapTab(event, root) {
+  if (event.key !== 'Tab' || !root) return false;
+  const list = focusablesIn(root).filter((n) => n.offsetParent !== null || n === root);
+  if (!list.length) { event.preventDefault?.(); return true; }
+  const first = list[0];
+  const last = list[list.length - 1];
+  const active = (() => { try { return document.activeElement; } catch { return null; } })();
+  const inside = active && (root === active || (typeof root.contains === 'function' && root.contains(active)));
+  if (!inside) { event.preventDefault?.(); first.focus?.(); return true; }
+  if (event.shiftKey && active === first) { event.preventDefault?.(); last.focus?.(); return true; }
+  if (!event.shiftKey && active === last) { event.preventDefault?.(); first.focus?.(); return true; }
+  return false;
+}
+
+function restoreFocus() {
+  const a = _focusStack.pop();
+  try { if (a && typeof a.focus === 'function') a.focus(); } catch { /* 节点已随重渲染移除时忽略 */ }
+}
+/* 单次网络动作期间锁住触发按钮，防重复点击；结束后无论成败都解锁。 */
+async function withBusy(node, fn) {
+  if (node) node.disabled = true;
+  try { return await fn(); } finally { if (node) node.disabled = false; }
+}
+
 /* ── 语言 ───────────────────────────────────────────── */
 const LOCALE = (() => {
   try {
@@ -114,7 +158,8 @@ const I18N = {
     connected: '已连接', connectedTitle: '已连接的应用', close: '关闭',
     connectedEmpty: '还没有连接任何应用', connectedEmptyHint: '在上方目录里挑一个，点「连接」即可。',
     noCatalog: '目录为空', noCatalogHint: '检查网络，或点「刷新」重新拉取目录。',
-    noMatch: '没有匹配的内容', noMatchHint: '换一个关键词，或清除筛选条件。',
+    noMatch: '没有匹配“{q}”的内容', noMatchPlain: '这个分类还没有内容',
+    noMatchHint: '换一个关键词，或清除筛选条件。',
     repair: '修复凭据', repairTitle: '更新凭据',
     repairHint: '只替换 Token / API Key，URL、作用域、注入模式等其余配置保持不变。',
     newToken: '新的 API Token', newKey: '新的 API Key', keyHeader: '头名（可选）',
@@ -137,6 +182,15 @@ const I18N = {
     oauthClientId: 'OAuth Client ID', oauthClientSecret: 'OAuth Client Secret（可选）',
     oauthFlow: '授权方式', flowAuto: '自动', flowCode: '浏览器授权码', flowDevice: '设备码（输入短码）',
     statConnected: '在连', statProblem: '异常',
+    invalid: '凭据已失效', idle: '已停用',
+    reqTimeout: '请求超时，请重试', reqFailedHttp: '请求失败（HTTP {status}）', reqFailed: '请求失败：{msg}',
+    oauthClientSecretHint: '（机密客户端才需要）', connectorLabel: '连接器',
+    tokenPlaceholderBearer: 'API Token', tokenPlaceholderKey: 'API Key',
+    addHint: '粘贴 MCP 连接配置 JSON（{ "mcpServers": { … } }），或填写连接器描述 URL。',
+    addJson: 'JSON 配置', addUrl: '或：描述文件 URL', addRequired: '请填写 JSON 或 URL',
+    clearFilters: '清除筛选', searchShortcut: '按 / 或 ⌘K 聚焦搜索',
+    manage: '管理', clearSearch: '清除搜索', toastClose: '知道了',
+    viewGroup: '视图', loadingText: '正在读取…',
   },
   en: {
     brand: 'Connector', subtitle: 'External service access', catalog: 'Catalog',
@@ -144,7 +198,8 @@ const I18N = {
     connected: 'Connected', connectedTitle: 'Connected apps', close: 'Close',
     connectedEmpty: 'Nothing connected yet', connectedEmptyHint: 'Pick one from the catalog above and hit Connect.',
     noCatalog: 'Catalog is empty', noCatalogHint: 'Check the network, or press Refresh to reload.',
-    noMatch: 'Nothing matches', noMatchHint: 'Try another keyword, or clear the filters.',
+    noMatch: 'Nothing matches “{q}”', noMatchPlain: 'Nothing in this category yet',
+    noMatchHint: 'Try another keyword, or clear the filters.',
     repair: 'Fix credentials', repairTitle: 'Update credentials',
     repairHint: 'Only the token / API key is replaced; URL, scope and injection mode stay unchanged.',
     newToken: 'New API token', newKey: 'New API key', keyHeader: 'Header name (optional)',
@@ -167,6 +222,15 @@ const I18N = {
     oauthClientId: 'OAuth Client ID', oauthClientSecret: 'OAuth Client Secret (optional)',
     oauthFlow: 'Authorization flow', flowAuto: 'Auto', flowCode: 'Browser authorization code', flowDevice: 'Device code (enter a short code)',
     statConnected: 'Active', statProblem: 'Issues',
+    invalid: 'Credential invalid', idle: 'Disabled',
+    reqTimeout: 'Request timed out, please retry', reqFailedHttp: 'Request failed (HTTP {status})', reqFailed: 'Request failed: {msg}',
+    oauthClientSecretHint: '(confidential clients only)', connectorLabel: 'Connector',
+    tokenPlaceholderBearer: 'API Token', tokenPlaceholderKey: 'API Key',
+    addHint: 'Paste MCP connection config JSON ({ "mcpServers": { … } }), or enter a connector descriptor URL.',
+    addJson: 'JSON config', addUrl: 'Or: descriptor URL', addRequired: 'Please enter JSON or a URL',
+    clearFilters: 'Clear filters', searchShortcut: 'Press / or ⌘K to focus search',
+    manage: 'Manage', clearSearch: 'Clear search', toastClose: 'Dismiss',
+    viewGroup: 'View', loadingText: 'Loading…',
   },
 };
 const t = (key, params) => {
@@ -178,11 +242,21 @@ const groupLabel = (key) => GROUP_LABEL[LOCALE]?.[key] ?? GROUP_LABEL['zh-CN'][k
 
 function toast(message, kind = '') {
   const node = el('toast');
+  if (!node) return;
   node.textContent = message;
   node.hidden = false;
   node.dataset.kind = kind;
+  // 长消息（后端原样透传的错误）按字数延长停留，避免还没读完就消失
+  const dwell = Math.min(10000, Math.max(4200, String(message || '').length * 160));
   clearTimeout(node._timer);
-  node._timer = setTimeout(() => { node.hidden = true; }, 4200);
+  node._timer = setTimeout(() => { node.hidden = true; }, dwell);
+}
+
+/** 点击 toast 立即收起：它是临时提示，不该让人等。 */
+function bindToastDismiss() {
+  const node = el('toast');
+  if (!node || typeof node.addEventListener !== 'function') return;
+  node.addEventListener('click', () => { clearTimeout(node._timer); node.hidden = true; });
 }
 
 /* ── 数据加载 ───────────────────────────────────────── */
@@ -194,7 +268,8 @@ function toast(message, kind = '') {
 async function loadAll() {
   if (state.busy) { state.refreshPending = true; return; }
   state.busy = true;
-  if (!state.loaded) setLoading(true);
+  // 每次取数据都进加载态：首屏铺骨架，后续只给刷新按钮转圈。
+  setLoading(true);
   try {
     const workspaceParams = state.workspaceId ? { workspaceId: state.workspaceId } : {};
     const [statusRes, catalogRes] = await Promise.all([
@@ -214,10 +289,53 @@ async function loadAll() {
   }
 }
 
+/**
+ * 加载态。
+ *
+ * 这里有一条硬约束：**任何加载提示都不允许占据布局高度**。
+ * 早先的实现里 `#loading` 在每次 refresh 时 `hidden = false`，
+ * 那一行「正在读取…」有 19.2px 高，把下面的目录整片往下推，
+ * 数据回来又弹回去 —— 这就是「打开连接器会抖一下」的直接原因。
+ *
+ * 现在的分工：
+ *   · 首屏（还没有任何数据）：铺骨架卡片 + 骨架分组条，形状与真实内容一致，
+ *     数据到达时是「填内容」，所有元素的位置一开始就定了。
+ *   · 后续刷新（已有内容）：完全不碰 DOM 结构，只在刷新按钮上转圈。
+ *   · 读屏播报：aria-busy 挂在内容容器上，不占像素。
+ */
 function setLoading(on) {
   state.loading = on;
   const node = el('loading');
-  if (node) node.hidden = !on;
+  try {
+    // 提示文字永不参与布局，只服务读屏
+    if (node) {
+      node.hidden = true;
+      node.setAttribute('aria-busy', 'false');
+      if (node.classList) node.classList.add('visually-hidden');
+    }
+    const content = el('content');
+    if (content && content.setAttribute) content.setAttribute('aria-busy', String(Boolean(on)));
+  } catch { /* 测试桩忽略 */ }
+
+  if (!node && !el('rows')) return;
+  try {
+    if (on && !state.loaded) {
+      const rows = el('rows');
+      if (!rows) return;
+      const cards = state.layout === 'grid' ? 'grid grid-cards' : 'grid grid-list';
+      // 6 张就够铺满一屏，多画只是浪费
+      rows.innerHTML = `<div class="${cards}" aria-hidden="true">${'<div class="skeleton"></div>'.repeat(6)}</div>`;
+      // 分组条也必须先占好位：它默认 hidden，数据到达时才出现会把下方整片内容
+      // 推下去 49px。骨架阶段先画一排等宽灰条，数据回来后是「填内容」。
+      renderGroupBarSkeleton();
+      return;
+    }
+    const btn = el('btn-refresh');
+    if (btn && btn.dataset) {
+      if (on) btn.dataset.busy = '1';
+      else delete btn.dataset.busy;
+    }
+  } catch { /* 测试桩忽略 */ }
 }
 
 /* ── 状态推导 ───────────────────────────────────────── */
@@ -249,6 +367,60 @@ function groupOf(item) {
 /** 某条连接实例对应的目录项 category（用于分组） */
 function catalogCategoryOf(id) { return state.catalog.find((c) => c.id === id)?.category ?? ''; }
 
+/* ── 动效：只回应操作，且尊重「减少动态效果」 ───────────
+ * 翻页、切分类、换布局都是「同一块区域整片换内容」。
+ * 直接替换 innerHTML 会让整块内容瞬移，眼睛会跟丢；这里做一次很短的
+ * 交叉淡入（旧内容上浮淡出 → 换内容 → 新内容下沉淡入），并把滚动位置
+ * 平滑送回顶部。两类动作各约 90–160ms，比一次眨眼还短，但方向感清楚。
+ * `prefers-reduced-motion` 下全部退化为立即替换。
+ */
+function prefersReducedMotion() {
+  try { return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true; } catch { return false; }
+}
+
+/** 内容区回到顶部：翻页后用平滑滚动，避免「瞬移」的割裂感。 */
+function scrollContentTop(smooth) {
+  const node = el('content');
+  if (!node) return;
+  try {
+    if (smooth && !prefersReducedMotion() && typeof node.scrollTo === 'function') {
+      node.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      node.scrollTop = 0;
+    }
+  } catch { /* 测试桩忽略 */ }
+}
+
+/* 每次切换递增的令牌：连点翻页时只有最后一次的结果会落地，不会两批内容打架。 */
+let swapToken = 0;
+const LEAVE_MS = 90;
+
+/**
+ * 交叉淡入地替换列表内容。
+ * mutate 负责真正写 innerHTML；离开动画结束后才动内容，避免半截内容闪一下。
+ */
+function crossfadeRows(mutate) {
+  const rows = el('rows');
+  if (!rows || !rows.classList || prefersReducedMotion()) { mutate(); return; }
+  const token = ++swapToken;
+  try { clearTimeout(rows._leaveTimer); clearTimeout(rows._enterTimer); } catch { /* 桩忽略 */ }
+  rows.classList.add('rows-leaving');
+  rows._leaveTimer = setTimeout(() => {
+    if (token !== swapToken) return;
+    mutate();
+    rows.classList.remove('rows-leaving');
+    rows.classList.remove('rows-enter');
+    void rows.offsetWidth; // 强制回流，让同名入场动画能重播
+    rows.classList.add('rows-enter');
+    rows._enterTimer = setTimeout(() => {
+      if (token === swapToken) rows.classList.remove('rows-enter');
+    }, 240);
+  }, LEAVE_MS);
+}
+
+/** 标记「下一次列表渲染来自用户切页/切分类」，renderCatalog 会据此播放过渡。 */
+let animateNext = false;
+
 /* ── 渲染总入口 ─────────────────────────────────────── */
 function render() {
   const connectedCount = state.items.filter((i) => i.enabled !== false).length;
@@ -261,6 +433,24 @@ function render() {
   renderGroupBar();
   renderCatalog(state.query.trim().toLowerCase());
   if (state.drawerOpen) renderDrawer();
+}
+
+/**
+ * 分组条骨架：在数据回来之前先占住分组条的高度。
+ * 宽度按常见分类名的字宽估算，切换时下方内容完全不动。
+ */
+const GROUP_SKELETON = [[26, 34], [44, 34], [44, 34], [44, 34], [44, 34], [44, 34]];
+function renderGroupBarSkeleton() {
+  const bar = el('groupbar');
+  if (!bar) return;
+  bar.innerHTML = GROUP_SKELETON
+    .map(([label, count]) => `<span class="groupbar-sk" aria-hidden="true"><i style="width:${label}px"></i><i class="n" style="width:${count}px"></i></span>`)
+    .join('');
+  // 骨架阶段还没有真实分类，墨条不该显示（否则底部会多一道黑线）
+  const ink = bar.querySelector('.groupbar-ink');
+  if (ink) ink.dataset.ready = '0';
+  bar.dataset.empty = '0';
+  bar.setAttribute('aria-hidden', 'false');
 }
 
 /** 分组条：按当前数据统计每个分组的数量，只显示非空组。 */
@@ -276,10 +466,46 @@ function renderGroupBar() {
   const keys = GROUP_KEYS.filter((k) => k === 'all' || counts.has(k));
   // 当前选中组没有数据时回落到全部
   if (!keys.includes(state.group)) state.group = 'all';
-  el('groupbar').innerHTML = counts.size
+  const bar = el('groupbar');
+  bar.innerHTML = counts.size
     ? keys.map((k) => `<button type="button" data-group="${k}" aria-pressed="${state.group === k}">${groupLabel(k)}<span class="n">${counts.get(k) ?? 0}</span></button>`).join('')
+      // 选中墨条是「一枚」元素，在按钮之间滑行；不用每个按钮各画一条下划线。
+      + '<span class="groupbar-ink" data-ready="0" aria-hidden="true"></span>'
     : '';
-  el('groupbar').hidden = !counts.size;
+  // 不再用 hidden 切换：分组条常在，隐藏/显示会把下方整片内容推上推下。
+  // 空数据时只标记 data-empty，视觉上留白但高度不变。
+  bar.dataset.empty = counts.size ? '0' : '1';
+  bar.setAttribute('aria-hidden', counts.size ? 'false' : 'true');
+  syncGroupInk();
+}
+
+/**
+ * 把滑动墨条对齐到当前选中的分组按钮。
+ *
+ * 用 offsetLeft/offsetTop/offsetWidth（groupbar 是定位容器）而不是
+ * getBoundingClientRect，这样面板滚动时也不会算错。
+ * 同时写 x 与 y：窄面板里分组条可能折行，墨条必须贴住被选中那一行，
+ * 而不是永远待在容器底部。测试桩没有布局信息时静默跳过。
+ */
+function syncGroupInk() {
+  const bar = el('groupbar');
+  if (!bar || typeof bar.querySelector !== 'function') return;
+  const ink = bar.querySelector('.groupbar-ink');
+  const active = bar.querySelector('button[aria-pressed="true"]');
+  if (!ink || !active || !ink.style) return;
+  const left = Number(active.offsetLeft) || 0;
+  const top = Number(active.offsetTop) || 0;
+  const height = Number(active.offsetHeight) || 0;
+  const width = Number(active.offsetWidth) || 0;
+  ink.style.width = `${width}px`;
+  // -1px：让墨条压在分组条那条发丝线上，而不是浮在它上方
+  ink.style.transform = `translate(${left}px, ${top + height - 1}px)`;
+  ink.dataset.ready = '1';
+}
+
+/** 面板宽度变化后重算墨条位置（折行与否会改变行的位置）。 */
+function relayoutGroupInk() {
+  try { syncGroupInk(); } catch { /* 桩忽略 */ }
 }
 
 /** 通用分页渲染。 */
@@ -294,7 +520,7 @@ function renderPager(total, page, pageSize, onPage) {
     <button class="tbtn" data-page="prev" ${page <= 0 ? 'disabled' : ''}>${t('prev')}</button>
     <span class="info">${t('pageInfo', { from, to, total })}</span>
     <span class="spacer"></span>
-    <span class="info">${page + 1} / ${pages}</span>
+    <span class="info page-no">${page + 1} / ${pages}</span>
     <button class="tbtn" data-page="next" ${page + 1 >= pages ? 'disabled' : ''}>${t('next')}</button>`;
   pager._onPage = onPage;
 }
@@ -306,8 +532,17 @@ function pageSlice(list, page, pageSize) {
   return { p, items: list.slice(p * pageSize, p * pageSize + pageSize) };
 }
 
-function emptyHtml(titleKey, hintKey) {
-  return `<div class="empty"><strong>${t(titleKey)}</strong>${t(hintKey)}</div>`;
+/**
+ * 空状态。把用户输入的关键词回显在提示里（「没有匹配 “xxx” 的内容」），
+ * 让人确认是搜错了字而不是数据没了；再给一个可点的下一步。
+ */
+function emptyHtml(titleKey, hintKey, action = '', quote = '') {
+  let btn = '';
+  if (action === 'clear') btn = `<div class="empty-actions"><button class="tbtn strong" type="button" data-act="clear-filters">${esc(t('clearFilters'))}</button></div>`;
+  else if (action === 'refresh') btn = `<div class="empty-actions"><button class="tbtn" type="button" data-act="refresh">${esc(t('refresh'))}</button></div>`;
+  // 没有关键词（只是分类下没数据）时用不带占位符的标题，避免出现空的引号
+  const title = quote ? t(titleKey).replace('{q}', quote) : t('noMatchPlain');
+  return `<div class="empty"><strong>${esc(title)}</strong>${esc(t(hintKey))}${btn}</div>`;
 }
 
 /* ── 目录：分组 + 分页 ───────────────────────────────── */
@@ -320,57 +555,98 @@ function renderCatalog(q) {
   el('list-title').textContent = state.group === 'all' ? t('catalog') : groupLabel(state.group);
   el('list-count').textContent = list.length || '';
   if (!list.length) {
-    el('rows').innerHTML = emptyHtml(q || state.group !== 'all' ? 'noMatch' : 'noCatalog', q || state.group !== 'all' ? 'noMatchHint' : 'noCatalogHint');
+    const filtered = !!q || state.group !== 'all';
+    el('rows').innerHTML = emptyHtml(
+      filtered ? 'noMatch' : 'noCatalog',
+      filtered ? 'noMatchHint' : 'noCatalogHint',
+      filtered ? 'clear' : 'refresh',
+      q ? state.query.trim() : '',
+    );
     renderPager(0, 0, state.pageSize, () => {});
     return;
   }
   const gridClass = state.layout === 'grid' ? 'grid grid-cards' : 'grid grid-list';
-  el('rows').innerHTML = `<div class="${gridClass}">${slice.items.map((c) => cardHtml(c, state.layout)).join('')}</div>`;
-  renderPager(list.length, slice.p, state.pageSize, (p) => { state.page = p; renderCatalog(state.query.trim().toLowerCase()); });
+  const paint = () => {
+    el('rows').innerHTML = `<div class="${gridClass}">${slice.items.map((c) => cardHtml(c, state.layout)).join('')}</div>`;
+  };
+  // 只在用户主动翻页 / 切分类时过渡；SSE 静默刷新不闪。
+  if (animateNext) { animateNext = false; crossfadeRows(paint); } else { paint(); }
+  renderPager(list.length, slice.p, state.pageSize, (p) => {
+    animateNext = true;
+    state.page = p;
+    renderCatalog(state.query.trim().toLowerCase());
+  });
 }
 
+/** 统一图标出口：目录项、抽屉行都走它；icons.js 未加载时退回首字母，绝不开天窗。 */
+function iconHtmlFor(item, size, name) {
+  if (window.ConnectorIcons?.iconHtml) return window.ConnectorIcons.iconHtml(item, size);
+  return `<span class="ci-emoji">${esc(String(name ?? item.name ?? item.id ?? '?').trim().charAt(0).toUpperCase())}</span>`;
+}
+
+/**
+ * 目录卡片。两种布局共用同一套语义结构，只是排列不同：
+ *   图标 + 名称（含已连接点 + id）+ 厂商 + 简介 + [分类 · 鉴权] + 操作。
+ * 栅格卡片把操作压到右下、分类鉴权压在左下，底边贴齐卡片底；
+ * 列表行把元信息收进同一条水平带，整行只有一条 0.5px 分隔（不画成小卡片）。
+ */
 function cardHtml(c, layout = 'list') {
   const connected = (c.connected?.length ?? 0) > 0;
-  // 图标优先用目录自带 icon（URL/emoji/图标名），否则按 id / 类目挑线性矢量图标；
-  // icons.js 未加载时退回首字母，保证不会开天窗。
-  const icon = window.ConnectorIcons?.iconHtml
-    ? window.ConnectorIcons.iconHtml(c, layout === 'grid' ? 20 : 18)
-    : `<span class="ci-emoji">${esc(String(c.name || c.id || '?').trim().charAt(0).toUpperCase())}</span>`;
+  // 图标优先用目录自带 icon（URL/emoji/图标名），否则按 id / 类目挑线性矢量图标。
+  const icon = iconHtmlFor(c, layout === 'grid' ? 20 : 18, c.name);
   const meta = `<span>${esc(c.category || '')}</span><span>${esc(authLabel({ authMode: c.authMode }))}</span>`;
-  const foot = `<div class="tile-foot"><button class="tbtn ${connected ? '' : 'strong'}" data-act="connect" data-id="${esc(c.id)}">${connected ? t('detail') : t('connect')}</button></div>`;
+  // 绿点纯装饰（aria-hidden），已有「管理」按钮表达同一件事，不再挂中文 tooltip
+  const dot = connected ? '<span class="dot-ok" aria-hidden="true"></span>' : '';
+  // 已连接的项目不再走 connect（那会重复建连），改为打开「已连接」抽屉去管理。
+  // 列表里会有几十个同名按钮：给每个补上「动作 + 对象」的无障碍名字，
+  // 否则读屏用户听到的只是一串「连接 / 管理」，分不清是哪一条。
+  const act = connected
+    ? `<button class="tile-act is-on" type="button" data-act="open-drawer" aria-label="${esc(`${t('manage')} ${c.name}`)}">${t('manage')}</button>`
+    : `<button class="tile-act" type="button" data-act="connect" data-id="${esc(c.id)}" aria-label="${esc(`${t('connect')} ${c.name}`)}">${t('connect')}</button>`;
+
   if (layout === 'grid') {
     return `<article class="tile"${connected ? ' data-connected="1"' : ''}>
-      <div class="tile-icon">${icon}</div>
-      <div>
-        <div class="tile-name">${esc(c.name)} <span class="chip">${esc(c.id)}</span></div>
-        <div class="tile-vendor">${esc(c.vendor || '')}</div>
-        <div class="tile-desc">${esc(c.summary || '')}</div>
-        <div class="tile-tags">${meta}</div>
+      <div class="tile-head">
+        <div class="tile-icon">${icon}</div>
+        <div class="tile-ident">
+          <div class="tile-name">${esc(c.name)}${dot}</div>
+          <div class="tile-vendor">${esc(c.vendor || '')}</div>
+        </div>
       </div>
-      ${foot}
+      <div class="tile-desc">${esc(c.summary || '')}</div>
+      <div class="tile-foot">
+        <div class="tile-tags">${meta}</div>
+        ${act}
+      </div>
     </article>`;
   }
   // 列表视图精简列：图标 + 名称/ID + 一行简介 + 分类·鉴权 + 操作，去掉厂商独立行。
   return `<article class="tile"${connected ? ' data-connected="1"' : ''}>
     <div class="tile-icon">${icon}</div>
-    <div>
-      <div class="tile-name">${esc(c.name)} <span class="chip">${esc(c.id)}</span>${connected ? '<span class="dot-ok" aria-hidden="true"></span>' : ''}</div>
+    <div class="tile-ident">
+      <div class="tile-name">${esc(c.name)}${dot} <span class="chip">${esc(c.id)}</span></div>
       <div class="tile-desc tile-desc-clamp">${esc(c.summary || '')}</div>
-      <div class="tile-tags">${meta}</div>
     </div>
-    ${foot}
+    <div class="tile-tags">${meta}</div>
+    <div class="tile-foot">${act}</div>
   </article>`;
 }
 
 /* ── 已连接抽屉 ─────────────────────────────────────── */
 function openDrawer() {
+  captureFocus(el('btn-connected'));
   state.drawerOpen = true;
   el('scrim').hidden = false;
   el('drawer').hidden = false;
   el('btn-connected').setAttribute('aria-expanded', 'true');
   renderDrawer();
   document.body.classList.add('drawer-open');
-  setTimeout(() => el('drawer-close')?.focus(), 0);
+  // 焦点交给抽屉容器本身（tabindex=-1）：读屏与键盘用户立刻落到抽屉里，
+  // 但鼠标打开时不会在「关闭」按钮上留下一圈本不该有的焦点环。
+  setTimeout(() => {
+    const drawer = el('drawer');
+    try { drawer?.focus?.({ preventScroll: true }); } catch { /* 老浏览器忽略参数 */ }
+  }, 0);
 }
 function closeDrawer() {
   state.drawerOpen = false;
@@ -378,6 +654,7 @@ function closeDrawer() {
   el('drawer').hidden = true;
   el('btn-connected').setAttribute('aria-expanded', 'false');
   document.body.classList.remove('drawer-open');
+  restoreFocus();
 }
 
 function renderDrawer() {
@@ -393,6 +670,8 @@ function renderDrawer() {
     return;
   }
   el('drawer-rows').innerHTML = `<div class="rows">${list.map(rowHtml).join('')}</div>`;
+  // 重新渲染后内容换了一批，滚动位置必须收回顶部，否则会停在半截列表中间
+  try { el('drawer-rows').scrollTop = 0; } catch { /* 测试桩忽略 */ }
 }
 
 function rowHtml(item) {
@@ -402,7 +681,8 @@ function rowHtml(item) {
   const expired = item.credential?.expired;
   let note = '';
   let noteClass = '';
-  if (r === 'credential-invalid') { note = `${t('businessInvalid')} — ${t('hintReauth')}`; noteClass = 'bad'; }
+  // 失效行的药丸已经写了「凭据已失效」，备注只留「怎么办」这一步，不再重复诊断。
+  if (r === 'credential-invalid') { note = t('hintReauth'); noteClass = 'bad'; }
   else if (expired) { note = t('credentialExpired'); noteClass = 'bad'; }
   else if (expiring) { note = t('credentialExpiring'); noteClass = 'warn'; }
   /* 已验证是默认状态：状态药丸已经说了，不再重复一行备注。 */
@@ -411,57 +691,82 @@ function rowHtml(item) {
 
   const canRepair = item.authMode === 'bearer' || item.authMode === 'api-key';
   const actions = [];
-  if (r === 'credential-invalid' && canRepair) actions.push(`<button class="tbtn fix" data-act="repair" data-key="${esc(item.key)}" data-mode="${esc(item.authMode)}">${t('repair')}</button>`);
-  actions.push(`<button class="tbtn" data-act="${item.enabled === false ? 'enable' : 'disable'}" data-key="${esc(item.key)}">${item.enabled === false ? t('enable') : t('disable')}</button>`);
-  actions.push(`<button class="tbtn danger" data-act="disconnect" data-key="${esc(item.key)}">${t('disconnect')}</button>`);
+  const who = esc(item.name);
+  if (r === 'credential-invalid' && canRepair) actions.push(`<button class="tbtn fix" data-act="repair" data-key="${esc(item.key)}" data-mode="${esc(item.authMode)}" aria-label="${esc(`${t('repair')} ${item.name}`)}">${t('repair')}</button>`);
+  const toggleLabel = item.enabled === false ? t('enable') : t('disable');
+  actions.push(`<button class="tbtn" data-act="${item.enabled === false ? 'enable' : 'disable'}" data-key="${esc(item.key)}" aria-label="${esc(`${toggleLabel} ${item.name}`)}">${toggleLabel}</button>`);
+  actions.push(`<button class="tbtn danger" data-act="disconnect" data-key="${esc(item.key)}" aria-label="${esc(`${t('disconnect')} ${item.name}`)}">${t('disconnect')}</button>`);
 
-  return `<article class="row" data-readiness="${r}">
-    <div>
+  const icon = iconHtmlFor({ id: item.connectorId, category: catalogCategoryOf(item.connectorId), transport: item.transport }, 16, item.name);
+
+  /* 正常可用是默认状态，不必每行都挂一个「已连接」药丸——竖脊与图标底色已经说了。
+     只在需要人注意时（失效 / 待确认 / 已停用 / 即将过期）才出标签，抽屉才安静。 */
+  const quiet = r === 'verified' && !expired && !expiring;
+  // 需要人动手的行（凭据失效 / 待确认 / 已停用 / 凭据将过期）让动作常驻；
+  // 正常行把动作收进悬停态，抽屉才安静。两者位置一致，不会让人到处找按钮。
+  const needsAttention = !quiet;
+  return `<article class="row" data-readiness="${r}"${needsAttention ? ' data-attention="1"' : ''}>
+    <div class="row-icon">${icon}</div>
+    <div class="row-main">
       <div class="row-title">
         <strong>${esc(item.name)}</strong>
         <span class="chip">${esc(item.serverName)}</span>
-        <span class="state-label ${st.cls}">${st.text}</span>
-        ${expired || expiring ? `<span class="state-label ${expired ? 'bad' : 'warn'}">${expired ? t('credentialExpired') : t('credentialExpiring')}</span>` : ''}
+        ${quiet ? '' : `<span class="state-label ${st.cls}">${st.text}</span>`}
+        ${/* 状态本就是「失效」时不再叠一个「已过期」，避免同义标签并排；其余情况才补。 */ ''}
+        ${r !== 'credential-invalid' && (expired || expiring) ? `<span class="state-label ${expired ? 'bad' : 'warn'}">${expired ? t('credentialExpired') : t('credentialExpiring')}</span>` : ''}
       </div>
-      <div class="row-meta">
-        <span>${esc(authLabel(item))}</span>
-        ${item.transport ? `<span>${esc(item.transport)}</span>` : ''}
-        <span>${scopeLabel(item)}</span>
+      <div class="row-line">
+        <div class="row-meta">
+          <span>${esc(authLabel(item))}</span>
+          ${item.transport ? `<span>${esc(item.transport)}</span>` : ''}
+          <span>${scopeLabel(item)}</span>
+        </div>
+        <div class="row-actions">${actions.join('')}</div>
       </div>
       ${note ? `<div class="row-note ${noteClass}">${note}</div>` : ''}
     </div>
-    <div class="row-actions">${actions.join('')}</div>
   </article>`;
 }
 
 /* ── 交互 ───────────────────────────────────────────── */
 async function onAction(act, target) {
   const key = target.dataset.key;
-  if (act === 'repair') return openRepair(key, target.dataset.mode);
+  if (act === 'clear-filters') {
+    state.query = ''; state.group = 'all'; state.page = 0;
+    const search = el('search'); if (search) search.value = '';
+    return render();
+  }
+  if (act === 'refresh') return loadAll();
+  if (act === 'open-drawer') { if (!state.drawerOpen) openDrawer(); return; }
+  if (act === 'repair') return openRepair(key, target.dataset.mode, undefined, target);
   if (act === 'enable' || act === 'disable') {
-    const res = await call('setEnabled', { key, enabled: act === 'enable' });
-    toast(res.message);
-    return loadAll();
+    return withBusy(target, async () => {
+      const res = await call('setEnabled', { key, enabled: act === 'enable' });
+      toast(res.message);
+      return loadAll();
+    });
   }
   if (act === 'disconnect') {
     if (!confirm(t('confirmDisconnect'))) return;
-    const res = await call('disconnect', { key });
-    toast(res.message);
-    return loadAll();
+    return withBusy(target, async () => {
+      const res = await call('disconnect', { key });
+      toast(res.message);
+      return loadAll();
+    });
   }
   if (act === 'connect') {
-    const res = await call('connect', { connectorId: target.dataset.id });
+    const res = await withBusy(target, () => call('connect', { connectorId: target.dataset.id }));
     toast(res.message);
     if (res.ok) return loadAll();
     // OAuth 缺 DCR（或 DCR 被拒）：让用户补自己登记的 client_id / secret，而不是干瞪眼。
     if (res.detail?.recoverable === 'provide-oauth-client') {
-      return openOAuthClientDialog(target.dataset.id);
+      return openOAuthClientDialog(target.dataset.id, target);
     }
     if (/凭据|credential|api.?key|token/i.test(res.message || '')) {
       // 后端已在 detail 回传 connectorId；这里再兜一层，确保修复对话框拿得到 id，
       // 否则 configure 会因空 id 落到手工连接分支而必然失败。
       const detail = { ...(res.detail || {}), connectorId: res.detail?.connectorId || target.dataset.id };
-      return openRepair('', res.detail?.authMode || 'bearer', detail);
+      return openRepair('', res.detail?.authMode || 'bearer', detail, target);
     }
   }
 }
@@ -473,7 +778,9 @@ async function onAction(act, target) {
  * 的 client_id（必要时 secret）填进来，随后仍走标准浏览器授权。
  * 这里只把值原样交给 Host，不在前端保存、不回显。
  */
-function openOAuthClientDialog(connectorId) {
+function openOAuthClientDialog(connectorId, origin) {
+  captureFocus(origin);
+  document.body.classList.add('dialog-open');
   const mask = el('mask');
   mask.innerHTML = `<div class="dialog" role="dialog" aria-modal="true">
     <h2>${esc(t('oauthClientTitle'))}</h2>
@@ -481,7 +788,7 @@ function openOAuthClientDialog(connectorId) {
     <div class="field"><label>${esc(t('oauthClientId'))}</label>
       <input id="oauth-client-id" class="mono" autocomplete="off" placeholder="Iv1.xxxxxxxxxxxx"></div>
     <div class="field"><label>${esc(t('oauthClientSecret'))}</label>
-      <input type="password" id="oauth-client-secret" class="mono" autocomplete="off" placeholder="（机密客户端才需要）"></div>
+      <input type="password" id="oauth-client-secret" class="mono" autocomplete="off" placeholder="${esc(t('oauthClientSecretHint'))}"></div>
     <div class="field"><label>${esc(t('oauthFlow'))}</label>
       <select id="oauth-flow">
         <option value="">${esc(t('flowAuto'))}</option>
@@ -522,7 +829,9 @@ async function submitOAuthClient() {
   } finally { btn.disabled = false; }
 }
 
-function openRepair(key, mode, connectDetail) {
+function openRepair(key, mode, connectDetail, origin) {
+  captureFocus(origin);
+  document.body.classList.add('dialog-open');
   const mask = el('mask');
   const isBearer = mode !== 'api-key';
   const title = connectDetail ? t('connect') : t('repairTitle');
@@ -532,7 +841,7 @@ function openRepair(key, mode, connectDetail) {
   mask.innerHTML = `<div class="dialog" role="dialog" aria-modal="true">
     <h2>${esc(title)}</h2>
     <p>${esc(hint)}</p>
-    ${connectDetail ? `<div class="field"><label>连接器</label><input class="mono" value="${esc(connectDetail.connectorId || connectDetail.id || '')}" disabled></div>` : ''}
+    ${connectDetail ? `<div class="field"><label>${esc(t('connectorLabel'))}</label><input class="mono" value="${esc(connectDetail.connectorId || connectDetail.id || '')}" disabled></div>` : ''}
     ${guide?.url ? `<div class="field">
       <label>${esc(t('whereToGet'))}</label>
       <div class="help"><a href="${esc(guide.url)}" target="_blank" rel="noopener noreferrer">${esc(guide.label || t('openGuide'))}</a>
@@ -543,7 +852,7 @@ function openRepair(key, mode, connectDetail) {
     </div>` : ''}
     <div class="field">
       <label>${isBearer ? t('newToken') : t('newKey')}</label>
-      <input type="password" id="repair-value" class="mono" autocomplete="off" placeholder="${isBearer ? 'API Token' : 'API Key'}">
+      <input type="password" id="repair-value" class="mono" autocomplete="off" placeholder="${esc(isBearer ? t('tokenPlaceholderBearer') : t('tokenPlaceholderKey'))}">
     </div>
     ${isBearer ? '' : `<div class="field"><label>${t('keyHeader')}</label><input id="repair-header" class="mono" placeholder="X-Api-Key"></div>`}
     <div class="field"><div class="help" id="repair-help"></div></div>
@@ -585,15 +894,22 @@ async function submitRepair() {
   } finally { btn.disabled = false; }
 }
 
-function closeDialog() { el('mask').hidden = true; el('mask')._ctx = null; }
+function closeDialog() {
+  el('mask').hidden = true;
+  el('mask')._ctx = null;
+  document.body.classList.remove('dialog-open');
+  restoreFocus();
+}
 
-function openAdd() {
+function openAdd(origin) {
+  captureFocus(origin && typeof origin.focus === 'function' ? origin : el('btn-add'));
+  document.body.classList.add('dialog-open');
   const mask = el('mask');
   mask.innerHTML = `<div class="dialog" role="dialog" aria-modal="true">
-    <h2>${t('add')}</h2>
-    <p>粘贴 MCP 连接配置 JSON（{ "mcpServers": { … } }），或填写连接器描述 URL。</p>
-    <div class="field"><label>JSON 配置</label><textarea id="add-json" rows="6" class="mono" placeholder='{ "mcpServers": { "name": { "url": "https://…" } } }'></textarea></div>
-    <div class="field"><label>或：描述文件 URL</label><input id="add-url" class="mono" placeholder="https://…/dsh-connector.json"></div>
+    <h2>${esc(t('add'))}</h2>
+    <p>${esc(t('addHint'))}</p>
+    <div class="field"><label>${esc(t('addJson'))}</label><textarea id="add-json" rows="6" class="mono" placeholder='{ "mcpServers": { "name": { "url": "https://…" } } }'></textarea></div>
+    <div class="field"><label>${esc(t('addUrl'))}</label><input id="add-url" class="mono" placeholder="https://…/dsh-connector.json"></div>
     <div class="field"><div class="help" id="add-help"></div></div>
     <div class="dialog-actions">
       <button class="tbtn" data-dlg="cancel">${t('cancel')}</button>
@@ -603,13 +919,34 @@ function openAdd() {
   mask.hidden = false;
   mask._ctx = null;
   setTimeout(() => el('add-json')?.focus(), 0);
+  bindAddValidation();
+}
+
+/**
+ * 「添加连接」的即时校验：两个字段都空时保存不可点，填了任一即可。
+ * 只在输入变化时改按钮状态，不做逐字符报错（那会让人边打字边被训）。
+ */
+function bindAddValidation() {
+  const json = el('add-json');
+  const url = el('add-url');
+  const save = el('mask')?.querySelector?.('[data-dlg="add-save"]');
+  const help = el('add-help');
+  if (!save) return;
+  const sync = () => {
+    const filled = Boolean((json?.value || '').trim() || (url?.value || '').trim());
+    try { save.disabled = !filled; } catch { /* 桩忽略 */ }
+    if (filled && help) help.textContent = '';
+  };
+  sync();
+  json?.addEventListener?.('input', sync);
+  url?.addEventListener?.('input', sync);
 }
 
 async function submitAdd() {
   const json = el('add-json')?.value?.trim();
   const url = el('add-url')?.value?.trim();
   const help = el('add-help');
-  if (!json && !url) { help.textContent = '请填写 JSON 或 URL'; return; }
+  if (!json && !url) { help.textContent = t('addRequired'); return; }
   const btn = el('mask').querySelector('[data-dlg="add-save"]');
   btn.disabled = true;
   try {
@@ -670,7 +1007,19 @@ function bind() {
     img.replaceWith(span);
   }, true);
 
+  bindToastDismiss();
   el('search').addEventListener('input', (e) => { state.query = e.target.value; state.page = 0; render(); });
+  // 搜索框里的 Esc：先清关键词，已经是空的就让焦点离开（原生 search 行为不一致，自己定）
+  el('search').addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const input = e.target || el('search');
+    if (!input?.value) return;
+    e.preventDefault?.();
+    e.stopPropagation?.();
+    input.value = '';
+    state.query = ''; state.page = 0;
+    render();
+  });
   el('btn-refresh').addEventListener('click', () => loadAll());
   el('btn-add').addEventListener('click', openAdd);
 
@@ -680,30 +1029,38 @@ function bind() {
   el('scrim').addEventListener('click', closeDrawer);
 
   // 目录布局切换：列表 / 栅格，选择记在 localStorage。
+  // 换布局是「同一批内容换一种排法」，用过渡让卡片平滑重排，而不是整屏闪一下。
   el('layout-switch').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-layout]');
     if (!btn) return;
-    state.layout = btn.dataset.layout === 'grid' ? 'grid' : 'list';
-    try { localStorage.setItem('connector-hub:layout', state.layout); } catch { /* 沙箱忽略 */ }
+    const next = btn.dataset.layout === 'grid' ? 'grid' : 'list';
+    if (next === state.layout) return;
+    try { localStorage.setItem('connector-hub:layout', next); } catch { /* 沙箱忽略 */ }
+    animateNext = true;
+    state.layout = next;
     render();
   });
 
-  // 分组切换
+  // 分组切换：墨条滑到位 + 列表交叉淡入，页码归零。
   el('groupbar').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-group]');
     if (!btn) return;
-    state.group = btn.dataset.group;
+    const next = btn.dataset.group;
+    if (next === state.group) return;
+    animateNext = true;
+    state.group = next;
     state.page = 0;
     render();
+    scrollContentTop(true);
   });
 
-  // 分页：纯本地切片，不发请求。
+  // 分页：纯本地切片，不发请求。翻页时内容交叉淡入，滚动位置平滑回顶。
   el('pager').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-page]');
     if (!btn || btn.disabled || !el('pager')._onPage) return;
     const delta = btn.dataset.page === 'prev' ? -1 : 1;
     el('pager')._onPage(Math.max(0, state.page + delta));
-    el('content').scrollTop = 0;
+    scrollContentTop(true);
   });
 
   // 目录卡片 / 抽屉里的动作
@@ -726,8 +1083,9 @@ function bind() {
       const ctx = el('mask')._ctx;
       const connectorId = ctx?.connectorId || ctx?.connectDetail?.connectorId || ctx?.connectDetail?.id;
       if (!connectorId) return;
-      el('mask').querySelector('[data-dlg="reuse-cli"]').disabled = true;
-      call('reuseCliAuth', { connectorId }).then(async (res) => {
+      const btn = e.target.closest('[data-dlg="reuse-cli"]');
+      withBusy(btn, async () => {
+        const res = await call('reuseCliAuth', { connectorId });
         toast(res.message);
         if (res.ok) { closeDialog(); await loadAll(); }
         else { const help = el('repair-help'); if (help) help.textContent = res.message || ''; }
@@ -736,10 +1094,58 @@ function bind() {
     else if (act === 'add-save') submitAdd();
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    if (!el('mask').hidden) return closeDialog();
+    // 弹层优先吃 Tab（叠在抽屉之上时只有它该响应）
+    const mask = el('mask');
+    if (!mask.hidden && trapTab(e, mask.querySelector('.dialog'))) return;
+    if (mask.hidden && state.drawerOpen && trapTab(e, el('drawer'))) return;
+    if (e.key === 'Escape') {
+      if (!mask.hidden) return closeDialog();
+      if (state.drawerOpen) closeDrawer();
+      return;
+    }
+    // 「/」与 ⌘K / Ctrl+K 快速聚焦搜索；弹层打开时不抢焦点，输入框里的 '/' 正常输入。
+    // 抽屉打开时不拦：搜索是全局动作，用户在抽屉里也想切到搜索。
+    const focusSearch = e.key === '/' || ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K'));
+    if (!focusSearch || !el('mask').hidden) return;
+    if (state.drawerOpen && e.key === '/') return;
+    const tag = e.target?.tagName;
+    const editable = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable;
+    if (editable && e.key === '/') return;
+    const search = el('search');
+    if (!search) return;
+    e.preventDefault?.();
     if (state.drawerOpen) closeDrawer();
+    search.focus();
+    if (typeof search.select === 'function') search.select();
   });
+
+  /* 面板宽度自适应：iframe 被拖宽/拖窄时调整每页条数，宽面板不空、窄面板不挤。
+     决策在 ui/responsive.js（纯函数、可单测），这里只应用结果。
+     ResizeObserver 缺失或 vm 测试桩里静默回退，不影响功能。 */
+  const applyResponsive = () => {
+    const R = window.ConnectorResponsive;
+    if (!R || typeof R.pageSizeFor !== 'function') return;
+    const width = (() => {
+      try { return document.documentElement?.clientWidth || window.innerWidth || 0; } catch { return 0; }
+    })();
+    const next = R.pageSizeFor(width, 12);
+    if (next !== state.pageSize) { state.pageSize = next; render(); }
+    else relayoutGroupInk();
+    try { document.documentElement.dataset.breakpoint = R.breakpointFor(width); } catch { /* 桩忽略 */ }
+  };
+  try {
+    if (typeof ResizeObserver !== 'undefined') {
+      let raf = 0;
+      const ro = new ResizeObserver(() => {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(applyResponsive);
+      });
+      ro.observe(document.documentElement);
+    } else {
+      window.addEventListener('resize', applyResponsive);
+    }
+  } catch { /* 沙箱或测试桩忽略 */ }
+  applyResponsive();
 
   window.addEventListener('message', (event) => {
     if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
@@ -782,14 +1188,17 @@ function applyStaticText() {
   el('view-title').textContent = t('brand');
   el('section-label').textContent = t('subtitle');
   el('search').placeholder = t('search');
+  el('search').title = t('searchShortcut');
   el('btn-refresh').textContent = t('refresh');
   el('btn-add').textContent = t('add');
   el('connected-label').textContent = t('connected');
   el('drawer-title').textContent = t('connectedTitle');
   el('drawer-close').textContent = t('close');
   el('list-title').textContent = t('catalog');
+  el('loading').textContent = t('loadingText');
   const layoutSwitch = el('layout-switch');
   if (layoutSwitch) {
+    layoutSwitch.setAttribute('aria-label', t('viewGroup'));
     const lb = layoutSwitch.querySelector('[data-layout="list"]');
     const gb = layoutSwitch.querySelector('[data-layout="grid"]');
     if (lb) { lb.title = t('layoutList'); lb.setAttribute('aria-label', t('layoutList')); }

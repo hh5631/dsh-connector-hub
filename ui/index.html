@@ -5,18 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="color-scheme" content="light dark" />
 <title>连接器</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f1115'/%3E%3Cpath d='M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z' fill='none' stroke='%23ffffff' stroke-width='1.9' stroke-linejoin='round' transform='translate(4 3.2) scale(.72)'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="hub.css" />
 </head>
 <body>
 <div class="shell">
   <main class="main">
     <header class="topbar">
+      <span class="brand-mark" id="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/></svg>
+      </span>
       <h1 id="view-title">连接器</h1>
       <span class="crumb" id="section-label">外部服务接入</span>
       <span class="spacer"></span>
       <div class="search">
-        <span class="icon" aria-hidden="true">⌕</span>
-        <input id="search" type="search" autocomplete="off" placeholder="搜索连接器…">
+        <span class="icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2 14 14"/></svg>
+        </span>
+        <input id="search" type="search" autocomplete="off" placeholder="搜索连接器…" title="按 / 或 ⌘K 聚焦搜索">
       </div>
       <button class="tbtn" type="button" id="btn-refresh">刷新</button>
       <button class="tbtn strong" type="button" id="btn-add">添加连接</button>
@@ -27,7 +33,7 @@
     </header>
 
     <div class="content" id="content">
-      <div class="groupbar" id="groupbar" hidden></div>
+      <div class="groupbar" id="groupbar" data-empty="1"></div>
 
       <div class="section-head">
         <h3 id="list-title">目录</h3>
@@ -42,7 +48,7 @@
           </button>
         </div>
       </div>
-      <div class="loading" id="loading" hidden>正在读取…</div>
+      <div class="loading" id="loading" role="status" aria-live="polite" aria-busy="false" hidden>正在读取…</div>
       <div id="rows"></div>
       <div class="pager" id="pager" hidden></div>
     </div>
@@ -50,7 +56,7 @@
 </div>
 
 <div class="scrim" id="scrim" hidden></div>
-<aside class="drawer" id="drawer" aria-labelledby="drawer-title" hidden>
+<aside class="drawer" id="drawer" aria-labelledby="drawer-title" tabindex="-1" hidden>
   <div class="drawer-head">
     <h2 id="drawer-title">已连接</h2>
     <button class="tbtn" type="button" id="drawer-close">关闭</button>
@@ -60,9 +66,10 @@
 </aside>
 
 <div class="mask" id="mask" hidden></div>
-<div class="toast" id="toast" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="icons.js"></script>
+<script src="responsive.js"></script>
 <script src="hub.js"></script>
 </body>
 </html>

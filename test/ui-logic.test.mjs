@@ -121,6 +121,7 @@ test('hub.js UI 逻辑', async () => {
   assert.ok(bar.includes('data-group="dev"') && bar.includes('data-group="design"'), '分组条含 开发/设计 两组');
   assert.ok(bar.includes('data-group="all"'), '分组条含「全部」');
   assert.equal(get('groupbar').hidden, false, '有数据时显示分组条');
+  assert.equal(get('groupbar').dataset.empty, '0', '有数据时不是空态');
 
   // 切到某组后标题换成组名
   S.group = 'dev'; S.page = 0;
@@ -131,7 +132,10 @@ test('hub.js UI 逻辑', async () => {
   // 空目录 → 分组条隐藏
   S.catalog = []; S.group = 'all';
   ctx.renderGroupBar();
-  assert.equal(get('groupbar').hidden, true, '目录为空时隐藏分组条');
+  // v10 起不再用 hidden 切换（那会把下方内容推上推下），改用 data-empty 表达：
+  // 高度照留、内容不渲染，视觉上仍是隐藏。
+  assert.equal(get('groupbar').dataset.empty, '1', '目录为空时分组条标记为空');
+  assert.equal(get('groupbar').hidden, false, '不再用 hidden 切换，避免布局抖动');
 
   // ── 分类映射 ──
   S.catalog = [{ id: 'a', category: '开发工具' }, { id: 'b', category: '设计创意' }];

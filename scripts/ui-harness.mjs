@@ -55,11 +55,6 @@ const scopeService = new ConnectionScopeService({
 await scopeService.load();
 const mockWorkspace = { workspaceId: 'workspace-mock', title: '无凭据验收项目' };
 const mockWorkspaces = [mockWorkspace, { workspaceId: 'workspace-second', title: '第二验收项目' }];
-const bundledAssets = new Map([
-  ['qcc-logo.svg', 'image/svg+xml'],
-  ['pkulaw-logo.png', 'image/png'],
-  ['wind-logo.png', 'image/png'],
-]);
 const eventClients = new Set();
 const mockExplorerRecovered = new Set();
 const mockObservedAt = Date.now();
@@ -211,30 +206,27 @@ const server = createServer(async (req, res) => {
     const body = await readFile(join(root, 'ui/index.html'));
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(body); return;
   }
-  if (req.method === 'GET' && req.url === '/connector-hub/ui/hub.css') {
-    const body = await readFile(join(root, 'ui/hub.css'));
-    res.writeHead(200, { 'content-type': 'text/css; charset=utf-8' }); res.end(body); return;
-  }
-  if (req.method === 'GET' && req.url === '/connector-hub/ui/hub.js') {
-    const body = await readFile(join(root, 'ui/hub.js'));
-    res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' }); res.end(body); return;
-  }
-  if (req.method === 'GET' && req.url === '/connector-hub/ui/locale.js') {
-    const body = await readFile(join(root, 'ui/locale.js'));
-    res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' }); res.end(body); return;
-  }
-  if (req.method === 'GET' && req.url === '/connector-hub/ui/sharing-experience.js') {
-    const body = await readFile(join(root, 'ui/sharing-experience.js'));
-    res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' }); res.end(body); return;
-  }
-  if (req.method === 'GET' && req.url === '/connector-hub/ui/connection-template-sharing.js') {
-    const body = await readFile(join(root, 'ui/connection-template-sharing.js'));
-    res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' }); res.end(body); return;
-  }
-  const assetName = req.url?.match(/^\/connector-hub\/ui\/assets\/([^/?#]+)$/)?.[1];
-  if (req.method === 'GET' && assetName && bundledAssets.has(assetName)) {
-    const body = await readFile(join(root, 'ui/assets', assetName));
-    res.writeHead(200, { 'content-type': bundledAssets.get(assetName) }); res.end(body); return;
+  // 通用静态资源服务：与线上 lib/web.js 的 resolveUiFile 对齐，任何 ui/ 下的文件
+  // （icons.js / hub.css / hub.js / locale.js / assets/… / 未来新增文件）都能自动返回，
+  // 不再靠逐个硬编码 if（历史上漏掉 icons.js 会让图标全部退化成首字母）。
+  const UI_PREFIX = '/connector-hub/ui/';
+  const uiPath = req.url?.split('?')[0];
+  if (req.method === 'GET' && uiPath?.startsWith(UI_PREFIX)) {
+    const rel = uiPath.slice(UI_PREFIX.length);
+    // 防目录穿越：只允许单层或一层子目录下的「安全文件名」。
+    if (rel && !rel.includes('..') && !rel.includes('\\') && /^[\w.-]+(?:\/[\w.-]+)*$/.test(rel)) {
+      const MIME = {
+        '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
+        '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
+        '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml',
+        '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2',
+      };
+      const ext = rel.slice(rel.lastIndexOf('.')).toLowerCase();
+      try {
+        const body = await readFile(join(root, 'ui', rel));
+        res.writeHead(200, { 'content-type': MIME[ext] || 'application/octet-stream' }); res.end(body); return;
+      } catch { /* 不存在的文件落到下方 404 */ }
+    }
   }
   if (req.method === 'GET' && req.url === '/connector-hub/events') {
     res.writeHead(200, {
