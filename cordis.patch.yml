@@ -11,9 +11,15 @@
         refreshSkewMs: 300000
         openBrowser: true
         showSidebarEntry: true
-        # true：仅注册发现与会话两个管理入口；完整连接配置仍在界面操作。
-        # 保持 false 兼容已有对话/自动化；更改后重载插件。
-        compactManagementTools: false
+        # true：仅注册发现与会话两个管理入口（connector_hub_discover +
+        # connector_hub_session_tools），其余 26 个管理工具不再占用每次请求的
+        # schema 预算；完整连接配置仍在界面操作。更改后重载插件/新会话生效。
+        compactManagementTools: true
+        # false：按会话注入的业务工具由模型自行判断需要时激活，不再每次弹
+        # 「确认吗」——与宿主 mcp-client 的 dsh_use_tools 同一做法（Codex 式）。
+        # 激活仍受连接启用状态、工作区可见性、治理 deny 与 30 分钟 TTL 约束。
+        # 想让含付费/写操作的连接恢复逐次确认，改成 true。
+        requireActivationConfirmation: false
         # Connector Hub 深度健康探测：握手 ok 但凭据已失效时不再误报「已连接」。
         deepHealthProbe: true
         deepProbeTimeoutMs: 6000
