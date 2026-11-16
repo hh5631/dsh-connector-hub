@@ -492,7 +492,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
  * 离开 90ms：整块轻轻上浮并淡出；入场 200ms：从下方 5px 淡入。
  * 两段都在百毫秒级，方向感清楚又不拖沓；reduced-motion 下直接换。
  */
-#rows { will-change: opacity, transform; }
+/* 不要给 #rows 挂常驻 will-change：它包裹整页卡片，等于让浏览器永远
+   为一个几百个节点的大子树保留独立合成层，长列表滚动反而更吃内存与合成时间。
+   交叉淡入只在真正切换的那一瞬间需要提升，交给动画自身的合成提示即可。 */
+#rows { contain: layout style; }
 
 .rows-leaving {
   opacity: 0;

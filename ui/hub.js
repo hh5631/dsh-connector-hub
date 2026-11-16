@@ -72,6 +72,7 @@ const state = {
   layout: (() => { try { return localStorage.getItem('connector-hub:layout') === 'grid' ? 'grid' : 'list'; } catch { return 'list'; } })(),
   loaded: false,          // 是否已拿到过首屏数据（只在第一次显示 loading）
   refreshPending: false,  // 加载中又收到刷新信号时，结束后补跑一次
+  refreshCatalogPending: false, // 补跑那一次还需不需要重拉目录
   drawerOpen: false,
 };
 
@@ -265,8 +266,11 @@ function bindToastDismiss() {
  * healthCheck 即使轻量也要握手甚至跑探针（实测 8s+），把它放进首屏路径就是这个面板卡顿的根因。
  * 目录走 compact 模式（后端砍掉 prompts/servers 等大字段，313KB → ~18KB）。
  */
-async function loadAll() {
-  if (state.busy) { state.refreshPending = true; return; }
+async function loadAll(options = {}) {
+  if (state.busy) { state.refreshPending = true; state.refreshCatalogPending ||= options.catalog !== false; return; }
+  // withCatalog=false：只有连接状态变了（连接 / 断开 / 启停）。目录是上游 CDN
+  // 数据，跟这些动作无关，白拉一次 18KB 没有意义，也会让面板多重绘一次。
+  const withCatalog = options.catalog !== false;
   state.busy = true;
   // 每次取数据都进加载态：首屏铺骨架，后续只给刷新按钮转圈。
   setLoading(true);
@@ -274,18 +278,25 @@ async function loadAll() {
     const workspaceParams = state.workspaceId ? { workspaceId: state.workspaceId } : {};
     const [statusRes, catalogRes] = await Promise.all([
       call('status', workspaceParams),
-      call('catalog', { ...workspaceParams, compact: true }),
+      withCatalog ? call('catalog', { ...workspaceParams, compact: true }) : null,
     ]);
     if (statusRes.ok) state.items = statusRes.detail?.items ?? [];
     else toast(statusRes.message, 'bad');
-    if (catalogRes.ok) state.catalog = catalogRes.detail?.items ?? [];
+    if (catalogRes?.ok) state.catalog = catalogRes.detail?.items ?? [];
     state.loaded = true;
     writeSnapshot();
     render();
   } finally {
     state.busy = false;
     setLoading(false);
-    if (state.refreshPending) { state.refreshPending = false; loadAll(); }
+    if (state.refreshPending) {
+      const needCatalog = state.refreshCatalogPending;
+      state.refreshPending = false;
+      state.refreshCatalogPending = false;
+      loadAll({ catalog: needCatalog });
+    } else {
+      state.refreshCatalogPending = false;
+    }
   }
 }
 
@@ -356,16 +367,46 @@ function authLabel(item) {
 }
 function scopeLabel(item) { return item.scope?.label ? esc(item.scope.label) : t('global'); }
 
+/* 目录索引：渲染每条连接都要按 connectorId 反查目录项。
+   逐条 find 在「几百条目录 × 几十条连接」时是 O(n·m)，每次重绘都要重算；
+   这里按 catalog 数组身份做一次性 Map，重绘只查表。 */
+let catalogIndexKey = null;
+let catalogIndex = new Map();
+function catalogById() {
+  const list = state.catalog;
+  if (catalogIndexKey === list) return catalogIndex;
+  catalogIndexKey = list;
+  catalogIndex = new Map();
+  for (const c of list) if (c && c.id !== undefined) catalogIndex.set(c.id, c);
+  return catalogIndex;
+}
+
+/* 搜索串缓存：逐键输入时每个目录项都要把 name/id/vendor/summary/category
+   拼起来再 toLowerCase，几百条就是每键上千次字符串分配。用小写串一次算好、
+   挂在对象上复用；目录项被替换（新对象）时自然失效，不需要手动清缓存。 */
+const _haystack = new WeakMap();
+function haystackOf(c) {
+  if (typeof c !== 'object' || c === null) return '';
+  let s = _haystack.get(c);
+  if (s === undefined) {
+    s = [c.name, c.id, c.vendor, c.summary, c.category].map((v) => String(v ?? '').toLowerCase()).join('\u0000');
+    _haystack.set(c, s);
+  }
+  return s;
+}
+/** 目录项是否命中关键词（q 已小写；空关键词恒真）。 */
+function matchesQuery(c, q) { return !q || haystackOf(c).includes(q); }
+
 /** 连接的用处：从目录 category 映射；找不到归 custom。 */
 function groupOf(item) {
-  const cat = state.catalog.find((c) => c.id === item.connectorId)?.category;
+  const cat = catalogById().get(item.connectorId)?.category;
   if (cat && CATEGORY_GROUP[cat]) return CATEGORY_GROUP[cat];
   if (item.kind === 'manual' || item.kind === 'json' || !cat) return 'custom';
   return 'other';
 }
 
 /** 某条连接实例对应的目录项 category（用于分组） */
-function catalogCategoryOf(id) { return state.catalog.find((c) => c.id === id)?.category ?? ''; }
+function catalogCategoryOf(id) { return catalogById().get(id)?.category ?? ''; }
 
 /* ── 动效：只回应操作，且尊重「减少动态效果」 ───────────
  * 翻页、切分类、换布局都是「同一块区域整片换内容」。
@@ -389,6 +430,21 @@ function scrollContentTop(smooth) {
       node.scrollTop = 0;
     }
   } catch { /* 测试桩忽略 */ }
+}
+
+/* ── 渲染调度：一帧最多重绘一次 ─────────────────────────
+ * 搜索是**逐键**输入的。早先每个 keydown 都同步跑一次完整 render()：
+ * 重建分组条 innerHTML（还读 offsetLeft/offsetWidth 触发强制布局），
+ * 再重建整页卡片。目录几百条时单键十几毫秒，连打就是肉眼可见的掉帧。
+ * 现在输入类事件统一走 scheduleRender()：同一帧内的多次输入只重绘一次，
+ * 键盘回显永远先落地。离散动作（清除筛选、翻页、切分类）仍同步渲染。
+ */
+let renderFrame = 0;
+const supportsRaf = typeof requestAnimationFrame === 'function';
+function scheduleRender() {
+  if (renderFrame) return;
+  const run = () => { renderFrame = 0; render(); };
+  renderFrame = supportsRaf ? requestAnimationFrame(run) : setTimeout(run, 16);
 }
 
 /* 每次切换递增的令牌：连点翻页时只有最后一次的结果会落地，不会两批内容打架。 */
@@ -422,7 +478,18 @@ function crossfadeRows(mutate) {
 let animateNext = false;
 
 /* ── 渲染总入口 ─────────────────────────────────────── */
+/* 「哪条连接器已连上」以 status 为准（它是最新的），目录里的 connected 只做兜底。
+   这样启停 / 断开之后只需要重取 status，不必把上游 CDN 目录再拉一遍，
+   绿点与「管理 / 连接」按钮仍然是当拍就对的。 */
+let connectedIds = new Set();
+function refreshConnectedIds() {
+  const next = new Set();
+  for (const i of state.items) if (i && i.connectorId !== undefined && i.enabled !== false) next.add(i.connectorId);
+  connectedIds = next;
+}
+
 function render() {
+  refreshConnectedIds();
   const connectedCount = state.items.filter((i) => i.enabled !== false).length;
   el('connected-count').textContent = connectedCount || '';
   el('list-count').textContent = state.catalog.length || '';
@@ -458,7 +525,7 @@ function renderGroupBar() {
   const q = state.query.trim().toLowerCase();
   const counts = new Map();
   for (const c of state.catalog) {
-    if (q && ![c.name, c.id, c.vendor, c.summary, c.category].some((v) => String(v ?? '').toLowerCase().includes(q))) continue;
+    if (!matchesQuery(c, q)) continue;
     const g = CATEGORY_GROUP[c.category] ?? 'other';
     counts.set(g, (counts.get(g) ?? 0) + 1);
     counts.set('all', (counts.get('all') ?? 0) + 1);
@@ -467,11 +534,14 @@ function renderGroupBar() {
   // 当前选中组没有数据时回落到全部
   if (!keys.includes(state.group)) state.group = 'all';
   const bar = el('groupbar');
-  bar.innerHTML = counts.size
+  const html = counts.size
     ? keys.map((k) => `<button type="button" data-group="${k}" aria-pressed="${state.group === k}">${groupLabel(k)}<span class="n">${counts.get(k) ?? 0}</span></button>`).join('')
       // 选中墨条是「一枚」元素，在按钮之间滑行；不用每个按钮各画一条下划线。
       + '<span class="groupbar-ink" data-ready="0" aria-hidden="true"></span>'
     : '';
+  // 内容没变就不写 DOM：搜索逐键输入时计数常变，但清空筛选 / SSE 无变化
+  // 刷新回来是同一份 HTML，跳过写入即跳过整条按钮重建与随后的强制布局测量。
+  if (bar.innerHTML !== html) bar.innerHTML = html;
   // 不再用 hidden 切换：分组条常在，隐藏/显示会把下方整片内容推上推下。
   // 空数据时只标记 data-empty，视觉上留白但高度不变。
   bar.dataset.empty = counts.size ? '0' : '1';
@@ -497,9 +567,13 @@ function syncGroupInk() {
   const top = Number(active.offsetTop) || 0;
   const height = Number(active.offsetHeight) || 0;
   const width = Number(active.offsetWidth) || 0;
-  ink.style.width = `${width}px`;
-  // -1px：让墨条压在分组条那条发丝线上，而不是浮在它上方
-  ink.style.transform = `translate(${left}px, ${top + height - 1}px)`;
+  /* 位置没变就不写 style：resize 与每次 render 都会调用这里，
+     重复写 transform 会让浏览器把这一帧判成需要重新布局的脏帧。 */
+  if (ink._left !== left || ink._top !== top + height - 1) {
+    ink._left = left; ink._top = top + height - 1;
+    ink.style.transform = `translate(${left}px, ${top + height - 1}px)`;
+  }
+  if (ink._w !== width) { ink._w = width; ink.style.width = `${width}px`; }
   ink.dataset.ready = '1';
 }
 
@@ -512,16 +586,23 @@ function relayoutGroupInk() {
 function renderPager(total, page, pageSize, onPage) {
   const pager = el('pager');
   const pages = Math.max(1, Math.ceil(total / pageSize));
-  if (total <= pageSize) { pager.hidden = true; pager.innerHTML = ''; pager._onPage = null; return; }
+  if (total <= pageSize) {
+    pager.hidden = true;
+    if (pager.innerHTML !== '') pager.innerHTML = '';
+    pager._onPage = null;
+    return;
+  }
   const from = page * pageSize + 1;
   const to = Math.min(total, (page + 1) * pageSize);
   pager.hidden = false;
-  pager.innerHTML = `
+  const html = `
     <button class="tbtn" data-page="prev" ${page <= 0 ? 'disabled' : ''}>${t('prev')}</button>
     <span class="info">${t('pageInfo', { from, to, total })}</span>
     <span class="spacer"></span>
     <span class="info page-no">${page + 1} / ${pages}</span>
     <button class="tbtn" data-page="next" ${page + 1 >= pages ? 'disabled' : ''}>${t('next')}</button>`;
+  // 页码没变就只换回调：重写会让分页按钮上的 hover / 焦点状态一起丢失。
+  if (pager.innerHTML !== html) pager.innerHTML = html;
   pager._onPage = onPage;
 }
 
@@ -547,7 +628,9 @@ function emptyHtml(titleKey, hintKey, action = '', quote = '') {
 
 /* ── 目录：分组 + 分页 ───────────────────────────────── */
 function renderCatalog(q) {
-  let list = state.catalog.filter((c) => !q || [c.name, c.id, c.vendor, c.summary, c.category].some((v) => String(v ?? '').toLowerCase().includes(q)));
+  // 翻页 / 切分类会直接调到这里（不经过 render），已连接集合必须就地刷新
+  refreshConnectedIds();
+  let list = q ? state.catalog.filter((c) => matchesQuery(c, q)) : state.catalog;
   if (state.group !== 'all') list = list.filter((c) => (CATEGORY_GROUP[c.category] ?? 'other') === state.group);
 
   const slice = pageSlice(list, state.page, state.pageSize);
@@ -567,7 +650,12 @@ function renderCatalog(q) {
   }
   const gridClass = state.layout === 'grid' ? 'grid grid-cards' : 'grid grid-list';
   const paint = () => {
-    el('rows').innerHTML = `<div class="${gridClass}">${slice.items.map((c) => cardHtml(c, state.layout)).join('')}</div>`;
+    const rows = el('rows');
+    const html = `<div class="${gridClass}">${slice.items.map((c) => cardHtml(c, state.layout)).join('')}</div>`;
+    /* HTML 完全一致就跳过写入。SSE 静默刷新、切回同一分类、重复点当前页
+       都会走到 paint，但内容常常一字不差；每次重写 innerHTML 会让浏览器
+       丢掉现有节点、重新测量整页卡片（长列表下这是最大的一次卡顿）。 */
+    if (rows.innerHTML !== html) rows.innerHTML = html;
   };
   // 只在用户主动翻页 / 切分类时过渡；SSE 静默刷新不闪。
   if (animateNext) { animateNext = false; crossfadeRows(paint); } else { paint(); }
@@ -591,7 +679,7 @@ function iconHtmlFor(item, size, name) {
  * 列表行把元信息收进同一条水平带，整行只有一条 0.5px 分隔（不画成小卡片）。
  */
 function cardHtml(c, layout = 'list') {
-  const connected = (c.connected?.length ?? 0) > 0;
+  const connected = connectedIds.has(c.id) || (c.connected?.length ?? 0) > 0;
   // 图标优先用目录自带 icon（URL/emoji/图标名），否则按 id / 类目挑线性矢量图标。
   const icon = iconHtmlFor(c, layout === 'grid' ? 20 : 18, c.name);
   const meta = `<span>${esc(c.category || '')}</span><span>${esc(authLabel({ authMode: c.authMode }))}</span>`;
@@ -661,17 +749,25 @@ function renderDrawer() {
   const list = state.items;
   const active = list.filter((i) => i.enabled !== false).length;
   const problem = list.filter((i) => readinessOf(i) === 'credential-invalid').length;
-  el('drawer-stats').innerHTML = list.length
+  const stats = el('drawer-stats');
+  const statsHtml = list.length
     ? `<span class="stat ok"><b>${active}</b><span>${t('statConnected')}</span></span>` +
       `<span class="stat${problem ? ' bad' : ''}"><b>${problem}</b><span>${t('statProblem')}</span></span>`
     : '';
+  if (stats.innerHTML !== statsHtml) stats.innerHTML = statsHtml;
+  const body = el('drawer-rows');
   if (!list.length) {
-    el('drawer-rows').innerHTML = emptyHtml('connectedEmpty', 'connectedEmptyHint');
+    const empty = emptyHtml('connectedEmpty', 'connectedEmptyHint');
+    if (body.innerHTML !== empty) body.innerHTML = empty;
     return;
   }
-  el('drawer-rows').innerHTML = `<div class="rows">${list.map(rowHtml).join('')}</div>`;
-  // 重新渲染后内容换了一批，滚动位置必须收回顶部，否则会停在半截列表中间
-  try { el('drawer-rows').scrollTop = 0; } catch { /* 测试桩忽略 */ }
+  const html = `<div class="rows">${list.map(rowHtml).join('')}</div>`;
+  /* 抽屉常驻在 DOM 里，SSE 刷新、切分类都会调到这里。内容没变就别重写：
+     重写会让抽屉内的滚动位置与 hover 状态一起丢掉，用户正在看的那一行会跳。
+     只有内容真的换了才把滚动收回顶部。 */
+  if (body.innerHTML === html) return;
+  body.innerHTML = html;
+  try { body.scrollTop = 0; } catch { /* 测试桩忽略 */ }
 }
 
 function rowHtml(item) {
@@ -739,11 +835,13 @@ async function onAction(act, target) {
   if (act === 'refresh') return loadAll();
   if (act === 'open-drawer') { if (!state.drawerOpen) openDrawer(); return; }
   if (act === 'repair') return openRepair(key, target.dataset.mode, undefined, target);
+  /* 启停 / 断开只改连接状态，目录（上游 CDN 数据）不受影响：
+     只重取 status，少一次 18KB 请求、少一次整页重绘。 */
   if (act === 'enable' || act === 'disable') {
     return withBusy(target, async () => {
       const res = await call('setEnabled', { key, enabled: act === 'enable' });
       toast(res.message);
-      return loadAll();
+      return loadAll({ catalog: false });
     });
   }
   if (act === 'disconnect') {
@@ -751,7 +849,7 @@ async function onAction(act, target) {
     return withBusy(target, async () => {
       const res = await call('disconnect', { key });
       toast(res.message);
-      return loadAll();
+      return loadAll({ catalog: false });
     });
   }
   if (act === 'connect') {
@@ -1008,7 +1106,9 @@ function bind() {
   }, true);
 
   bindToastDismiss();
-  el('search').addEventListener('input', (e) => { state.query = e.target.value; state.page = 0; render(); });
+  /* 逐键输入：state 立刻更新（键盘回显不受影响），重绘压到下一帧。
+     连打时同一帧内多次 input 只重绘一次，长目录下不再出现掉帧。 */
+  el('search').addEventListener('input', (e) => { state.query = e.target.value; state.page = 0; scheduleRender(); });
   // 搜索框里的 Esc：先清关键词，已经是空的就让焦点离开（原生 search 行为不一致，自己定）
   el('search').addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
@@ -1165,15 +1265,26 @@ function bind() {
 
   let es;
   let refreshTimer;
+  /* SSE 类别与后端 StatusEventHub 的 ALLOWED_EVENT_TYPES 对齐：
+     connections / catalog / status / tools / governance / scope。
+     早先这里只认 'connection'、'catalog'、'status' —— 少了 s 的 'connection'
+     永远匹配不上后端的 'connections'，于是连上 / 修复凭据后靠事件刷新的路径是死的。
+     另外只有「目录类」事件才需要重拉 18KB 目录，连接状态类只重取 status。 */
+  let pendingCatalog = false;
   const scheduleRefresh = (event) => {
     if (document.hidden) return;
-    // 连接/目录类事件之外（心跳等）不必重取；两种情况都只是重取 18KB 目录 + 状态。
     let type = '';
     try { type = JSON.parse(event?.data ?? '{}')?.type ?? ''; } catch { /* 心跳等非 JSON 忽略 */ }
-    if (type && type !== 'catalog' && type !== 'connection' && type !== 'status') return;
+    // 空 type 是 'ready' 事件（订阅建立），照旧拉一次全量对齐。
+    if (type && type !== 'catalog' && type !== 'connections' && type !== 'status') return;
+    if (type === 'catalog' || type === '') pendingCatalog = true;
     clearTimeout(refreshTimer);
-    // SSE 刷新只重取状态/目录，绝不调 healthCheck（后者会再发 status 事件 → 自激循环）。
-    refreshTimer = setTimeout(() => loadAll(), 150);
+    // SSE 刷新只重取数据，绝不调 healthCheck（后者会再发 status 事件 → 自激循环）。
+    refreshTimer = setTimeout(() => {
+      const withCatalog = pendingCatalog;
+      pendingCatalog = false;
+      loadAll({ catalog: withCatalog });
+    }, 150);
   };
   try {
     es = new EventSource(EVENTS);
