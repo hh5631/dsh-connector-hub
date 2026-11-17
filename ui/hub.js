@@ -65,7 +65,6 @@ const state = {
   group: 'all',
   page: 0,
   pageSize: 12,
-  loading: false,
   busy: false,
   workspaceId: '',
   // 布局记在 localStorage，刷新面板后保持用户选择；沙箱里不可用时静默回退。
@@ -97,7 +96,11 @@ function writeSnapshot() {
 }
 
 const el = (id) => document.getElementById(id);
-const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+/* 转义表提到模块级：卡片渲染是热路径（每张卡 × 6 个字段 × 每次重绘），
+   写在箭头函数里等于每个字符都新建一个对象字面量。 */
+const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const ESC_RE = /[&<>"']/g;
+const esc = (v) => String(v ?? '').replace(ESC_RE, (c) => ESC_MAP[c]);
 
 /* 打开抽屉/对话框前记住焦点，关闭后归还，键盘用户不会「掉」回页面顶部。
    用栈而非单槽：抽屉里再弹修复对话框时，逐层归还才不会把焦点丢给 body。 */
@@ -166,12 +169,10 @@ const I18N = {
     newToken: '新的 API Token', newKey: '新的 API Key', keyHeader: '头名（可选）',
     save: '保存', cancel: '取消', connect: '连接', disconnect: '断开',
     enable: '启用', disable: '停用', detail: '已连接',
-    repaired: '凭据已更新',
     authBearer: 'Bearer Token', authApiKey: 'API Key', authOAuth: 'OAuth', authNone: '无需凭据',
     global: '全局', scopeProject: '项目',
     credentialExpiring: '凭据即将过期', credentialExpired: '凭据已过期',
     businessUnknown: '待确认',
-    businessInvalid: '凭据已失效：握手正常，但真实调用被拒绝',
     layoutList: '列表视图', layoutGrid: '栅格视图',
     hintReauth: '点「修复凭据」填入新 Token，或重新授权。',
     confirmDisconnect: '确定断开这条连接吗？',
@@ -206,12 +207,10 @@ const I18N = {
     newToken: 'New API token', newKey: 'New API key', keyHeader: 'Header name (optional)',
     save: 'Save', cancel: 'Cancel', connect: 'Connect', disconnect: 'Disconnect',
     enable: 'Enable', disable: 'Disable', detail: 'Connected',
-    repaired: 'Credentials updated',
     authBearer: 'Bearer Token', authApiKey: 'API Key', authOAuth: 'OAuth', authNone: 'No credential',
     global: 'Global', scopeProject: 'Project',
     credentialExpiring: 'Credential expiring soon', credentialExpired: 'Credential expired',
     businessUnknown: 'Unconfirmed',
-    businessInvalid: 'Credential invalid: handshake succeeded but real calls are rejected',
     layoutList: 'List view', layoutGrid: 'Grid view',
     hintReauth: 'Click Fix credentials to enter a new token, or reauthorize.',
     confirmDisconnect: 'Disconnect this connection?',
@@ -315,7 +314,6 @@ async function loadAll(options = {}) {
  *   · 读屏播报：aria-busy 挂在内容容器上，不占像素。
  */
 function setLoading(on) {
-  state.loading = on;
   const node = el('loading');
   try {
     // 提示文字永不参与布局，只服务读屏
@@ -396,14 +394,6 @@ function haystackOf(c) {
 }
 /** 目录项是否命中关键词（q 已小写；空关键词恒真）。 */
 function matchesQuery(c, q) { return !q || haystackOf(c).includes(q); }
-
-/** 连接的用处：从目录 category 映射；找不到归 custom。 */
-function groupOf(item) {
-  const cat = catalogById().get(item.connectorId)?.category;
-  if (cat && CATEGORY_GROUP[cat]) return CATEGORY_GROUP[cat];
-  if (item.kind === 'manual' || item.kind === 'json' || !cat) return 'custom';
-  return 'other';
-}
 
 /** 某条连接实例对应的目录项 category（用于分组） */
 function catalogCategoryOf(id) { return catalogById().get(id)?.category ?? ''; }
@@ -492,7 +482,8 @@ function refreshConnectedIds() {
 }
 
 function render() {
-  refreshConnectedIds();
+  /* 已连接集合由 renderCatalog 就地刷新（它也是翻页/切分类的唯一入口），
+     这里不再重复建一遍 Set —— 每次 render 曾要遍历两次 items。 */
   const connectedCount = state.items.filter((i) => i.enabled !== false).length;
   el('connected-count').textContent = connectedCount || '';
   el('list-count').textContent = state.catalog.length || '';
@@ -544,12 +535,21 @@ function renderGroupBar() {
     : '';
   // 内容没变就不写 DOM：搜索逐键输入时计数常变，但清空筛选 / SSE 无变化
   // 刷新回来是同一份 HTML，跳过写入即跳过整条按钮重建与随后的强制布局测量。
-  if (bar.innerHTML !== html) bar.innerHTML = html;
+  const rebuilt = bar.innerHTML !== html;
+  if (rebuilt) bar.innerHTML = html;
   // 不再用 hidden 切换：分组条常在，隐藏/显示会把下方整片内容推上推下。
   // 空数据时只标记 data-empty，视觉上留白但高度不变。
   bar.dataset.empty = counts.size ? '0' : '1';
   bar.setAttribute('aria-hidden', counts.size ? 'false' : 'true');
-  syncGroupInk();
+  /* 墨条定位要读 offsetLeft/offsetTop/offsetWidth，是一次强制同步布局。
+     以前每次 render（含 150ms 合并后的 SSE 静默刷新）都读一遍，紧接着
+     renderCatalog 又写 innerHTML —— 读写交替正是最费帧的那种组合。
+     现在只有「按钮集合变了」或「选中项变了」才重新测量；
+     面板宽度变化另有 ResizeObserver 走 relayoutGroupInk。 */
+  if (rebuilt || bar._inkGroup !== state.group) {
+    bar._inkGroup = state.group;
+    syncGroupInk();
+  }
 }
 
 /**
@@ -624,8 +624,14 @@ function emptyHtml(titleKey, hintKey, action = '', quote = '') {
   let btn = '';
   if (action === 'clear') btn = `<div class="empty-actions"><button class="tbtn strong" type="button" data-act="clear-filters">${esc(t('clearFilters'))}</button></div>`;
   else if (action === 'refresh') btn = `<div class="empty-actions"><button class="tbtn" type="button" data-act="refresh">${esc(t('refresh'))}</button></div>`;
-  // 没有关键词（只是分类下没数据）时用不带占位符的标题，避免出现空的引号
-  const title = quote ? t(titleKey).replace('{q}', quote) : t('noMatchPlain');
+  /* 只有标题里真的有 {q} 时才谈「回显关键词」。
+     没有占位符（noCatalog / connectedEmpty）必须用各自的标题——
+     以前的写法一律回退到 noMatchPlain，连「还没连接任何应用」
+     都会被写成「这个分类下还没有连接器」。 */
+  const raw = t(titleKey);
+  const title = !raw.includes('{q}')
+    ? raw
+    : quote ? raw.replace('{q}', quote) : t('noMatchPlain');
   return `<div class="empty"><strong>${esc(title)}</strong>${esc(t(hintKey))}${btn}</div>`;
 }
 

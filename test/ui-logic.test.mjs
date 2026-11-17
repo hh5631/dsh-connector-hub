@@ -139,10 +139,6 @@ test('hub.js UI 逻辑', async () => {
 
   // ── 分类映射 ──
   S.catalog = [{ id: 'a', category: '开发工具' }, { id: 'b', category: '设计创意' }];
-  assert.equal(run(`groupOf({ connectorId: 'a', kind: 'manual' })`), 'dev', 'groupOf 映射 开发工具');
-  assert.equal(run(`groupOf({ connectorId: 'b', kind: 'manual' })`), 'design', 'groupOf 映射 设计创意');
-  assert.equal(run(`groupOf({ connectorId: 'zz', kind: 'manual' })`), 'custom', 'groupOf 未匹配归 自定义');
-  assert.equal(run(`groupOf({ connectorId: 'a', kind: 'catalog' })`), 'dev', 'groupOf 目录来源按 category 映射');
   assert.equal(run(`groupLabel('design')`), '设计创意', 'groupLabel 中文');
   assert.equal(run(`CATEGORY_GROUP['地图出行']`), 'efficiency', '未知中文类目有兜底映射');
 
