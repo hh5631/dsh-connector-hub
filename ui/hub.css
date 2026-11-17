@@ -17,7 +17,7 @@
  *     强调色只出现在选中、焦点与主操作，绝不铺成大块底色。
  *   - 结构靠对齐与留白，线只用在「真的分隔内容」的地方。
  *   - 数字一律 tabular-nums，让计数在切页时不抖动。
- *   - 动效只回应操作，统一 120–160ms 曲线，不做入场动画。
+ *   - 动效只回应操作，统一 120–180ms 曲线，不做装饰性入场动画。
  *   - 尺寸自适应：间距 clamp() + 栅格 auto-fill + 顶栏小屏折叠。
  *
  * 明暗两套令牌对齐 DSH 宿主；字体与字号跟随宿主设置注入的 CSS 变量。
@@ -179,6 +179,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
 .tbtn:hover { background: var(--surface-2); color: var(--text); }
+/* 按下即反馈：背景再深一档，配合 120ms 过渡，点完不会「没反应」 */
+.tbtn:active:not(:disabled) { background: var(--surface-3); transition-duration: 60ms; }
 .tbtn.strong { color: var(--accent); font-weight: 600; }
 .tbtn.strong:hover { background: var(--accent-soft); }
 .tbtn.danger:hover { color: var(--bad); background: var(--bad-soft); }
@@ -197,6 +199,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   transition: border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
 }
 .connected-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.connected-btn:active { transform: translateY(.5px); }
 .connected-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .connected-btn .count {
   min-width: 18px; text-align: center;
@@ -301,8 +304,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background: var(--text);
   opacity: 0;
   transition:
-    transform 240ms var(--ease),
-    width 240ms var(--ease),
+    transform 180ms var(--ease),
+    width 180ms var(--ease),
     opacity var(--t-fast) linear;
   pointer-events: none;
 }
@@ -398,6 +401,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-size: 11px; color: var(--text-3);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* 厂商可能为空（自建/JSON 导入）。栅格里空行会把整张卡压矮 17px，
+   同排卡片随即参差；固定最小高度让「有没有厂商」不影响卡片高度。 */
+.grid-cards .tile-vendor { min-height: 1.5em; }
 .tile-vendor .chip { margin-left: 2px; }
 .tile-desc {
   min-width: 0;
@@ -452,6 +458,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
 }
 .tile-act:hover { color: var(--accent); background: var(--accent-soft); }
+.tile-act:active:not(:disabled) { background: var(--accent-soft); transform: translateY(.5px); }
 /* 已连接：弱化成安静的「已连接」，不再催促点击 */
 .tile-act.is-on { color: var(--text-3); font-weight: 500; }
 .tile-act.is-on:hover { color: var(--text-2); background: var(--surface-3); }
@@ -489,7 +496,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ── 内容切换：交叉淡入，而不是整屏闪一下 ───────────────
  * 翻页 / 切分类 / 换布局都是「同一块区域换内容」。
- * 离开 90ms：整块轻轻上浮并淡出；入场 200ms：从下方 5px 淡入。
+ * 离开 140ms：整块轻轻上浮并淡出；入场 180ms：从下方 5px 淡入。
+ * 两段都落在 120–180ms 的统一节奏里，翻页时既不「闪」也不「拖」。
  * 两段都在百毫秒级，方向感清楚又不拖沓；reduced-motion 下直接换。
  */
 /* 不要给 #rows 挂常驻 will-change：它包裹整页卡片，等于让浏览器永远
@@ -500,9 +508,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .rows-leaving {
   opacity: 0;
   transform: translateY(-4px);
-  transition: opacity 90ms var(--ease), transform 90ms var(--ease);
+  transition: opacity 140ms var(--ease), transform 140ms var(--ease);
 }
-.rows-enter { animation: rows-enter 200ms var(--ease) both; }
+.rows-enter { animation: rows-enter 180ms var(--ease) both; }
 @keyframes rows-enter {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
@@ -863,6 +871,24 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .drawer-body { padding: 12px 8px 32px; }
   .row { gap: 10px; padding-left: 14px; }
   .pager { gap: 8px; flex-wrap: wrap; }
+}
+
+/* 极窄（≤420px，常见于侧边栏拉出的窄面板）：
+   顶栏四个控件 + 搜索挤一行会换行两次，这里把它们按主次收成两行，
+   并让抽屉里的动作换成可换行的一组，避免按钮被压到只剩省略号。 */
+@media (max-width: 420px) {
+  :root { --gutter: 12px; }
+  .topbar { gap: 6px; padding: 12px var(--gutter) 10px; }
+  .topbar h1 { font-size: 14px; }
+  .topbar .tbtn { padding: 6px 6px; font-size: 12px; }
+  .topbar .connected-btn { padding: 0 8px; height: 30px; }
+  .search { height: 30px; }
+  .section-head { flex-wrap: wrap; row-gap: 6px; }
+  .row-actions { flex-wrap: wrap; row-gap: 2px; }
+  .row-actions .tbtn { padding: 4px 5px; }
+  .dialog { padding: 16px; border-radius: var(--r-card); }
+  .dialog-actions { flex-wrap: wrap; }
+  .empty { padding: 40px 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

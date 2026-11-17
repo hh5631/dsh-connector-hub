@@ -157,10 +157,10 @@ const I18N = {
     brand: '连接器', subtitle: '外部服务接入', catalog: '目录',
     search: '搜索连接器…', refresh: '刷新', add: '添加连接',
     connected: '已连接', connectedTitle: '已连接的应用', close: '关闭',
-    connectedEmpty: '还没有连接任何应用', connectedEmptyHint: '在上方目录里挑一个，点「连接」即可。',
-    noCatalog: '目录为空', noCatalogHint: '检查网络，或点「刷新」重新拉取目录。',
-    noMatch: '没有匹配“{q}”的内容', noMatchPlain: '这个分类还没有内容',
-    noMatchHint: '换一个关键词，或清除筛选条件。',
+    connectedEmpty: '还没有连接任何应用', connectedEmptyHint: '在上方目录里挑一个点「连接」；没有合适的可以「添加连接」粘贴 MCP 配置。',
+    noCatalog: '目录还没有内容', noCatalogHint: '可能尚未拉取到目录：检查网络后点「刷新」，或用「添加连接」直接粘贴 JSON。',
+    noMatch: '没有匹配“{q}”的内容', noMatchPlain: '这个分类下还没有连接器',
+    noMatchHint: '换个关键词，或清除筛选回到全部。',
     repair: '修复凭据', repairTitle: '更新凭据',
     repairHint: '只替换 Token / API Key，URL、作用域、注入模式等其余配置保持不变。',
     newToken: '新的 API Token', newKey: '新的 API Key', keyHeader: '头名（可选）',
@@ -197,10 +197,10 @@ const I18N = {
     brand: 'Connector', subtitle: 'External service access', catalog: 'Catalog',
     search: 'Search connectors…', refresh: 'Refresh', add: 'Add connection',
     connected: 'Connected', connectedTitle: 'Connected apps', close: 'Close',
-    connectedEmpty: 'Nothing connected yet', connectedEmptyHint: 'Pick one from the catalog above and hit Connect.',
-    noCatalog: 'Catalog is empty', noCatalogHint: 'Check the network, or press Refresh to reload.',
-    noMatch: 'Nothing matches “{q}”', noMatchPlain: 'Nothing in this category yet',
-    noMatchHint: 'Try another keyword, or clear the filters.',
+    connectedEmpty: 'Nothing connected yet', connectedEmptyHint: 'Pick one in the catalog above and press Connect; or use Add connection to paste MCP config.',
+    noCatalog: 'No catalog entries yet', noCatalogHint: 'The catalog may not have loaded: check the network and press Refresh, or paste MCP config with Add connection.',
+    noMatch: 'Nothing matches “{q}”', noMatchPlain: 'No connectors in this category yet',
+    noMatchHint: 'Try another keyword, or clear filters to see all.',
     repair: 'Fix credentials', repairTitle: 'Update credentials',
     repairHint: 'Only the token / API key is replaced; URL, scope and injection mode stay unchanged.',
     newToken: 'New API token', newKey: 'New API key', keyHeader: 'Header name (optional)',
@@ -449,7 +449,10 @@ function scheduleRender() {
 
 /* 每次切换递增的令牌：连点翻页时只有最后一次的结果会落地，不会两批内容打架。 */
 let swapToken = 0;
-const LEAVE_MS = 90;
+/* 与 hub.css 的 .rows-leaving 过渡时长保持一致（140ms）：
+   离开动画一结束就换内容，CSS 与 JS 两个数字必须同时改，否则会看到
+   「内容已经换好、上一批还在淡出」的重影。 */
+const LEAVE_MS = 140;
 
 /**
  * 交叉淡入地替换列表内容。
@@ -470,7 +473,7 @@ function crossfadeRows(mutate) {
     rows.classList.add('rows-enter');
     rows._enterTimer = setTimeout(() => {
       if (token === swapToken) rows.classList.remove('rows-enter');
-    }, 240);
+    }, 180);
   }, LEAVE_MS);
 }
 
