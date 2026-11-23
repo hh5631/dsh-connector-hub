@@ -60,7 +60,7 @@ const fetchImpl = async (url, opts) => {
   const body = JSON.parse(opts.body);
   fetchCalls.push(body);
   const h = handlers[body.method];
-  if (h !== undefined) return { ok: true, json: async () => h };
+  if (h !== undefined) return { ok: true, json: async () => typeof h === 'function' ? h(body.params) : h };
   if (body.method === 'status' || body.method === 'catalog') return { ok: true, json: async () => detail([]) };
   return { ok: true, json: async () => ({ ok: true, detail: {} }) };
 };
@@ -190,4 +190,25 @@ test('无关事件与隐藏页面：不发起任何请求', async () => {
   onStatus({ data: JSON.stringify({ type: 'tools', sequence: 3 }) });
   await tick(200);
   assert.equal(fetchCalls.length, before, '工具类事件不触发面板重取');
+});
+
+test('切换工作区立即发新请求，迟到的旧响应不会覆盖状态', async () => {
+  let resolveOld;
+  const old = new Promise(resolve => { resolveOld = resolve; });
+  handlers.status = ({ workspaceId }) => workspaceId === 'old' ? old : detail([{ key: 'current' }]);
+  try {
+    get('mask').hidden = true;
+    run("state.workspaceId = 'old'");
+    const oldLoad = run('loadAll()');
+    run("changeWorkspace('new')");
+    await tick();
+    assert.equal(run('state.items[0]?.key'), 'current');
+    resolveOld(detail([{ key: 'stale' }]));
+    await oldLoad;
+    assert.equal(run('state.items[0]?.key'), 'current');
+    assert.equal(run('state.workspaceId'), 'new');
+  } finally {
+    resolveOld(detail([]));
+    delete handlers.status;
+  }
 });

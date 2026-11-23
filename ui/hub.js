@@ -19,9 +19,12 @@ const TIMEOUTS = {
   setEnabled: 130000, catalog: 20000, status: 20000, _default: 30000,
 };
 
-async function call(method, params = {}) {
+async function call(method, params = {}, signal) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUTS[method] ?? TIMEOUTS._default);
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(abort, TIMEOUTS[method] ?? TIMEOUTS._default);
   try {
     const res = await fetch(API, {
       method: 'POST',
@@ -34,7 +37,10 @@ async function call(method, params = {}) {
     return data;
   } catch (error) {
     return { ok: false, message: error?.name === 'AbortError' ? t('reqTimeout') : t('reqFailed', { msg: error?.message || error }) };
-  } finally { clearTimeout(timer); }
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
+  }
 }
 
 /* 连接按「用处」分组：优先用目录里的 category，自定义/JSON 连接归到「自定义」。 */
@@ -74,6 +80,7 @@ const state = {
   refreshCatalogPending: false, // 补跑那一次还需不需要重拉目录
   drawerOpen: false,
 };
+let loadController;
 
 /* 首屏快照缓存：面板是 iframe，反复开关很常见。有快照就先立刻渲染，
    再在后台静默刷新，避免每次进来都对着空白等网络。键含 workspaceId 以免串台。 */
@@ -270,33 +277,57 @@ async function loadAll(options = {}) {
   // withCatalog=false：只有连接状态变了（连接 / 断开 / 启停）。目录是上游 CDN
   // 数据，跟这些动作无关，白拉一次 18KB 没有意义，也会让面板多重绘一次。
   const withCatalog = options.catalog !== false;
+  const controller = new AbortController();
+  loadController = controller;
+  const workspaceId = state.workspaceId;
   state.busy = true;
   // 每次取数据都进加载态：首屏铺骨架，后续只给刷新按钮转圈。
   setLoading(true);
   try {
-    const workspaceParams = state.workspaceId ? { workspaceId: state.workspaceId } : {};
+    const workspaceParams = workspaceId ? { workspaceId } : {};
     const [statusRes, catalogRes] = await Promise.all([
-      call('status', workspaceParams),
-      withCatalog ? call('catalog', { ...workspaceParams, compact: true }) : null,
+      call('status', workspaceParams, controller.signal),
+      withCatalog ? call('catalog', { ...workspaceParams, compact: true }, controller.signal) : null,
     ]);
+    if (loadController !== controller || state.workspaceId !== workspaceId) return;
     if (statusRes.ok) state.items = statusRes.detail?.items ?? [];
     else toast(statusRes.message, 'bad');
     if (catalogRes?.ok) state.catalog = catalogRes.detail?.items ?? [];
     state.loaded = true;
-    writeSnapshot();
+    if (statusRes.ok && (catalogRes?.ok || !withCatalog)) writeSnapshot();
     render();
   } finally {
-    state.busy = false;
-    setLoading(false);
-    if (state.refreshPending) {
-      const needCatalog = state.refreshCatalogPending;
+    if (loadController === controller) {
+      loadController = undefined;
+      state.busy = false;
+      setLoading(false);
+      const pending = state.refreshPending;
+      const catalog = state.refreshCatalogPending;
       state.refreshPending = false;
       state.refreshCatalogPending = false;
-      loadAll({ catalog: needCatalog });
-    } else {
-      state.refreshCatalogPending = false;
+      if (pending) void loadAll({ catalog });
     }
   }
+}
+
+function changeWorkspace(workspaceId) {
+  if (state.workspaceId === workspaceId) return;
+  loadController?.abort();
+  state.workspaceId = workspaceId;
+  state.busy = false;
+  state.refreshPending = false;
+  state.refreshCatalogPending = false;
+  if (!el('mask').hidden) closeDialog();
+  if (state.drawerOpen) closeDrawer();
+  const snapshot = readSnapshot();
+  const matches = snapshot?.workspaceId === workspaceId;
+  state.items = matches ? snapshot.items : [];
+  state.catalog = matches ? snapshot.catalog : [];
+  state.loaded = matches;
+  state.page = 0;
+  // 先更新连接数量和抽屉。缺少快照时 loadAll 会显示目录骨架。
+  render();
+  void loadAll();
 }
 
 /**
@@ -862,9 +893,11 @@ async function onAction(act, target) {
     });
   }
   if (act === 'connect') {
+    const workspaceId = state.workspaceId;
     const res = await withBusy(target, () => call('connect', { connectorId: target.dataset.id }));
     toast(res.message);
     if (res.ok) return loadAll();
+    if (state.workspaceId !== workspaceId) return;
     // OAuth 缺 DCR（或 DCR 被拒）：让用户补自己登记的 client_id / secret，而不是干瞪眼。
     if (res.detail?.recoverable === 'provide-oauth-client') {
       return openOAuthClientDialog(target.dataset.id, target);
@@ -876,6 +909,17 @@ async function onAction(act, target) {
       return openRepair('', res.detail?.authMode || 'bearer', detail, target);
     }
   }
+}
+
+function finishDialogRequest(button, help, result) {
+  const mask = el('mask');
+  const stillOpen = !mask.hidden && mask.contains(button);
+  toast(result.message);
+  if (result.ok) {
+    if (stillOpen) closeDialog();
+    return loadAll();
+  }
+  if (stillOpen && help) help.textContent = result.message || '';
 }
 
 /**
@@ -930,9 +974,7 @@ async function submitOAuthClient() {
       oauthClient: { clientId, ...(clientSecret ? { clientSecret } : {}) },
       ...(flow ? { oauthFlow: flow } : {}),
     });
-    toast(res.message);
-    if (res.ok) { closeDialog(); await loadAll(); }
-    else help.textContent = res.message || '';
+    await finishDialogRequest(btn, help, res);
   } finally { btn.disabled = false; }
 }
 
@@ -995,9 +1037,7 @@ async function submitRepair() {
           : { bearerToken: value }),
       });
     }
-    toast(res.message);
-    if (res.ok) { closeDialog(); await loadAll(); }
-    else help.textContent = res.message || '';
+    await finishDialogRequest(btn, help, res);
   } finally { btn.disabled = false; }
 }
 
@@ -1058,9 +1098,7 @@ async function submitAdd() {
   btn.disabled = true;
   try {
     const res = json ? await call('importJson', { json }) : await call('installFromUrl', { url });
-    toast(res.message);
-    if (res.ok) { closeDialog(); await loadAll(); }
-    else help.textContent = res.message || '';
+    await finishDialogRequest(btn, help, res);
   } finally { btn.disabled = false; }
 }
 
@@ -1194,10 +1232,9 @@ function bind() {
       if (!connectorId) return;
       const btn = e.target.closest('[data-dlg="reuse-cli"]');
       withBusy(btn, async () => {
+        const help = el('repair-help');
         const res = await call('reuseCliAuth', { connectorId });
-        toast(res.message);
-        if (res.ok) { closeDialog(); await loadAll(); }
-        else { const help = el('repair-help'); if (help) help.textContent = res.message || ''; }
+        await finishDialogRequest(btn, help, res);
       });
     }
     else if (act === 'add-save') submitAdd();
@@ -1260,8 +1297,7 @@ function bind() {
     if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
     if (event.data.type === 'connector-hub:workspace-context') {
       const ws = event.data.workspace;
-      state.workspaceId = ws?.workspaceId ? String(ws.workspaceId) : '';
-      loadAll();
+      changeWorkspace(ws?.workspaceId ? String(ws.workspaceId) : '');
       return;
     }
     if (event.data.type === 'connector-hub:theme-fonts') {

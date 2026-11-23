@@ -1,6 +1,6 @@
 {
   "name": "dsh-connector-hub",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Connector Hub for DeepSeek Harness — a full fork of dsh-mcp-connector with deep credential health probes, one-click credential repair, and a redesigned panel. Coexists with the original plugin.",
   "type": "module",
   "main": "lib/index.js",
